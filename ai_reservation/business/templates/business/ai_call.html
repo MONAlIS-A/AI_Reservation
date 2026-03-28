@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Call | {{ business.name }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ios-bg: #0D0D0F;
+            --ios-red: #FF3B30;
+            --ios-green: #34C759;
+            --primary-glow: rgba(139, 92, 246, 0.4);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--ios-bg);
+            height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: space-around;
+            color: white; padding: 20px; box-sizing: border-box; overflow: hidden;
+        }
+
+        .status-header { text-align: center; }
+        .status-header h1 { font-size: 1.8rem; margin: 0; font-weight: 500; }
+        .call-duration { color: var(--ios-green); font-size: 1rem; margin-top: 5px; }
+
+        .caller-avatar {
+            width: 140px; height: 140px;
+            background: linear-gradient(135deg, #7C3AED, #4F46E5);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            position: relative; box-shadow: 0 0 40px var(--primary-glow);
+        }
+
+        .pulse-wave {
+            position: absolute; width: 100%; height: 100%; border-radius: 50%;
+            background: rgba(124, 58, 237, 0.3); animation: pulse-ring 2s infinite ease-out;
+        }
+        @keyframes pulse-ring { 0% { transform: scale(0.8); opacity: 0.8; } 100% { transform: scale(2.5); opacity: 0; } }
+
+        /* Product Pop-up during call */
+        #product-popup {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+            background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px);
+            padding: 20px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1);
+            width: 280px; text-align: center; display: none; z-index: 200; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0;
+        }
+        #product-popup.active { display: block; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+        #product-popup img { width: 100%; height: 150px; object-fit: cover; border-radius: 16px; margin-bottom: 12px; }
+        .prod-btn { display: block; background: #FFF; color: #000; text-decoration: none; padding: 12px; border-radius: 12px; font-weight: 600; margin-top: 10px; }
+
+        .status-text { color: #94A3B8; font-size: 1rem; height: 20px; }
+
+        .btn-end {
+            width: 240px; height: 70px; background: var(--ios-red); border-radius: 35px;
+            display: flex; align-items: center; justify-content: center; gap: 15px;
+            cursor: pointer; border: none; color: white; font-size: 1.2rem; font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+
+{% csrf_token %}
+
+<div id="product-popup">
+    <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 8px;">Product Suggestion</div>
+    <img id="p-img" src="" alt="">
+    <div id="p-name" style="font-weight: 600; margin-bottom: 4px;"></div>
+    <div id="p-price" style="color: var(--ios-green); margin-bottom: 12px;"></div>
+    <a id="p-link" href="" target="_blank" class="prod-btn">View Details</a>
+    <button onclick="hidePopup()" style="background:transparent; border:none; color:#94A3B8; margin-top:10px; cursor:pointer;">Close</button>
+</div>
+
+<div class="status-header">
+    <h1>{{ business.name }}</h1>
+    <div class="call-duration" id="timer">00:00</div>
+</div>
+
+<div class="caller-avatar">
+    <div class="pulse-wave"></div>
+    <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+</div>
+
+<div class="status-text" id="status-text">Connecting Al...</div>
+
+<button class="btn-end" onclick="endCall()">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" style="transform: rotate(135deg);"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+    <span>END CALL</span>
+</button>
+
+<script>
+    const bizId = "{{ business.id }}";
+    const statusText = document.getElementById('status-text');
+    const timerElement = document.getElementById('timer');
+    const popup = document.getElementById('product-popup');
+    let isCalling = true;
+    let seconds = 0;
+
+    setInterval(() => { if(isCalling) { seconds++; timerElement.textContent = `${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`; } }, 1000);
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    let isBotSpeaking = false;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.onstart = () => { if(!isBotSpeaking) statusText.textContent = "Listening..."; };
+        recognition.onresult = async (e) => { await getAIResponse(e.results[0][0].transcript); };
+        recognition.onend = () => { if (isCalling && !isBotSpeaking) recognition.start(); };
+        recognition.onerror = () => { if (isCalling && !isBotSpeaking) setTimeout(() => recognition.start(), 500); };
+        recognition.start();
+    }
+
+    async function getAIResponse(text) {
+        isBotSpeaking = true;
+        statusText.textContent = "Thinking...";
+        try {
+            const resp = await fetch(`/api/chat/${bizId}/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify({ message: text }) });
+            const data = await resp.json();
+            
+            // প্রোডাক্ট পপআপ দেখানো (যদি থাকে)
+            if(data.products && data.products.length > 0) {
+                showPopup(data.products[0]);
+            }
+
+            await speak(data.answer);
+        } catch (e) { isBotSpeaking = false; recognition.start(); }
+    }
+
+    function showPopup(p) {
+        document.getElementById('p-img').src = p.image || '';
+        document.getElementById('p-name').textContent = p.name;
+        document.getElementById('p-price').textContent = p.price;
+        document.getElementById('p-link').href = p.link || '#';
+        popup.classList.add('active');
+        setTimeout(() => hidePopup(), 10000); // 10 sec পর অটো হাইড
+    }
+    function hidePopup() { popup.classList.remove('active'); }
+
+    function speak(text) {
+        return new Promise((resolve) => {
+            const ut = new SpeechSynthesisUtterance(text);
+            ut.onend = () => { isBotSpeaking = false; statusText.textContent = "Listening..."; if(isCalling) recognition.start(); resolve(); };
+            window.speechSynthesis.speak(ut);
+        });
+    }
+
+    function endCall() {
+        isCalling = false;
+        window.speechSynthesis.cancel();
+        if(recognition) recognition.abort();
+        const bizName = "{{ business.name|escapejs }}";
+        window.location.href = "/chat/" + encodeURIComponent(bizName) + "/";
+    }
+</script>
+</body>
+</html>

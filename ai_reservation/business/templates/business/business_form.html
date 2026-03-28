@@ -1,0 +1,284 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add New Business</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #F8F9FA;
+            --card-bg: #FFFFFF;
+            --text-primary: #1F2937;
+            --text-secondary: #6B7280;
+            --label-color: #8D949F;
+            --border-color: #E5E7EB;
+            --input-bg: #F3F4F6;
+            --btn-bg: #7C73FF;
+            --btn-hover: #6960E1;
+            --status-bg: #E8F5E9;
+            --status-text: #2E7D32;
+            --status-dot: #4CAF50;
+            --focus-ring: rgba(124, 115, 255, 0.3);
+            --border-radius: 12px;
+            --font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .header {
+            background-color: #F8F9FB; /* Slightly off-white matching the design header */
+            padding: 24px 32px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .form-content {
+            padding: 32px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.full-width {
+            margin-bottom: 24px;
+        }
+
+        label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--label-color);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        input[type="text"],
+        input[type="url"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            background-color: var(--input-bg);
+            font-family: var(--font-family);
+            font-size: 14px;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--btn-bg);
+            background-color: var(--card-bg);
+            box-shadow: 0 0 0 3px var(--focus-ring);
+        }
+        
+        input::placeholder,
+        textarea::placeholder {
+            color: #9CA3AF;
+        }
+
+        .url-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .url-input-container input {
+            padding-right: 40px;
+            border: 1px solid #C4C4FF; /* purplish border for URL field as per design */
+            background-color: #FBFAFF; /* slightly purplish bg */
+        }
+        
+        .url-input-container input:focus {
+            background-color: var(--card-bg);
+        }
+
+        .url-icon {
+            position: absolute;
+            right: 14px;
+            color: var(--btn-bg);
+            font-size: 18px;
+            pointer-events: none;
+        }
+
+        select {
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%236B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            padding-right: 40px;
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 32px;
+        }
+
+        .btn-submit {
+            background-color: var(--btn-bg);
+            color: white;
+            border: none;
+            border-radius: 24px; /* rounded pill shape */
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-family: var(--font-family);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-submit:hover {
+            background-color: var(--btn-hover);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--status-bg);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--status-dot);
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-text {
+             color: var(--status-text);
+             margin-left: 4px;
+        }
+
+        /* Hide django's default form labels as we are rendering them manually */
+        .django-form p {
+            margin: 0;
+        }
+        .help-text {
+             font-size: 11px;
+             color: #9CA3AF;
+             margin-top: 4px;
+        }
+        .errorlist {
+            color: #ef4444;
+            font-size: 12px;
+            list-style: none;
+            padding: 0;
+            margin: 4px 0 0 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2>Add New Business</h2>
+    </div>
+
+    <div class="form-content">
+        <form method="post" class="django-form">
+            {% csrf_token %}
+            
+            <div class="form-group full-width">
+                <label for="{{ form.name.id_for_label }}">Business Name</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                    {{ form.name.errors }}
+                {% endif %}
+            </div>
+
+            <div class="form-group full-width">
+                <label for="{{ form.website_url.id_for_label }}">Website URL</label>
+                <div class="url-input-container">
+                    {{ form.website_url }}
+                    <span class="url-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                        </svg>
+                    </span>
+                </div>
+                {% if form.website_url.errors %}
+                    {{ form.website_url.errors }}
+                {% endif %}
+            </div>
+
+            <div class="form-group full-width" style="margin-bottom: 0;">
+                <label for="{{ form.description.id_for_label }}">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    {{ form.description.errors }}
+                {% endif %}
+            </div>
+
+            <div class="footer">
+                <button type="submit" class="btn-submit">
+                   [ Train AI from Website ]
+                </button>
+                <div class="status-badge">
+                    <span class="status-dot"></span> Status: <span class="status-text">Ready</span>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>

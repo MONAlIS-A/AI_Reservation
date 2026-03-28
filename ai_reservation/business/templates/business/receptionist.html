@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Receptionist Front-Desk | {{ business.name }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #8B5CF6;
+            --primary-soft: #EDE9FE;
+            --bg-dark: #0D0E12;
+            --card-glass: rgba(255, 255, 255, 0.03);
+            --border-glass: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            color: #F8FAFC;
+        }
+
+        .sidebar {
+            width: 35%;
+            background: radial-gradient(circle at 0% 0%, #1E1B4B, #0D0E12);
+            padding: 60px 40px;
+            display: flex; flex-direction: column; justify-content: center;
+            border-right: 1px solid var(--border-glass);
+            z-index: 2;
+        }
+
+        .avatar-box {
+            width: 120px; height: 120px;
+            background: linear-gradient(135deg, var(--primary), #4F46E5);
+            border-radius: 40px;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 40px rgba(139, 92, 246, 0.3);
+            position: relative;
+        }
+
+        .pulse {
+            position: absolute; width: 100%; height: 100%; border-radius: 40px;
+            background: var(--primary); opacity: 0.4;
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.9); opacity: 0.7; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+
+        h1 { font-size: 3rem; margin: 0; font-weight: 600; letter-spacing: -2px; line-height: 1; }
+        .biz-name { color: var(--primary); display: block; }
+        p.tagline { color: #94A3B8; font-size: 1.2rem; margin: 20px 0 40px; }
+
+        .chat-main {
+            flex: 1; display: flex; flex-direction: column;
+            padding: 30px; background: #0D0E12; position: relative;
+        }
+
+        #messages {
+            flex: 1; overflow-y: auto; padding: 20px;
+            display: flex; flex-direction: column; gap: 20px; z-index: 2;
+        }
+
+        .msg {
+            max-width: 70%; padding: 20px; border-radius: 24px;
+            font-size: 1.05rem; line-height: 1.5;
+            animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+
+        @keyframes slideIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        .bot { background: var(--card-glass); border: 1px solid var(--border-glass); align-self: flex-start; border-top-left-radius: 4px; }
+        .user { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 4px; box-shadow: 0 10px 20px rgba(139, 92, 246, 0.2); }
+
+        /* Product Card Glassmorphism */
+        .prod-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 15px;
+            width: 280px;
+            margin-top: 10px;
+            align-self: flex-start;
+            animation: slideIn 0.5s ease;
+        }
+
+        .prod-card img {
+            width: 100%; height: 160px; object-fit: cover;
+            border-radius: 18px; margin-bottom: 12px;
+        }
+
+        .prod-title { font-weight: 600; font-size: 1.1rem; margin-bottom: 5px; }
+        .prod-price { color: var(--primary); font-weight: 600; margin-bottom: 10px; }
+        .prod-btn {
+            display: block; text-align: center; background: var(--primary);
+            color: white; text-decoration: none; padding: 12px;
+            border-radius: 12px; font-weight: 500; transition: 0.3s;
+        }
+        .prod-btn:hover { background: #7C3AED; transform: translateY(-2px); }
+
+        .input-bar {
+            background: var(--card-glass); border: 1px solid var(--border-glass);
+            border-radius: 30px; padding: 10px 10px 10px 30px;
+            display: flex; align-items: center; backdrop-filter: blur(10px);
+        }
+
+        input { background: transparent; border: none; color: white; flex: 1; font-size: 1.1rem; outline: none; }
+        .btn-send { background: var(--primary); color: white; border: none; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .btn-send:hover { transform: scale(1.1); }
+        .typing { color: var(--primary); font-size: 0.9rem; margin-bottom: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="avatar-box">
+        <div class="pulse"></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="60" height="60"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    </div>
+    <h1>AI <span class="biz-name">Receptionist</span></h1>
+    <p class="tagline">Providing intelligent assistance for <strong>{{ business.name }}</strong> 24/7.</p>
+</div>
+
+<div class="chat-main">
+    <div id="messages">
+        <div class="msg bot">Hello! I am the automated front-desk assistant for {{ business.name }}. How can I help you today?</div>
+    </div>
+    <div class="typing" id="typing">Assistant is thinking...</div>
+    <div class="input-container">
+        {% csrf_token %}
+        <div class="input-bar">
+            <input type="text" id="user-input" placeholder="Ask me something..." autocomplete="off">
+            <button class="btn-send" id="send-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>
+            </button>
+            <button class="btn-send" id="mic-btn" style="background: #475569; margin-left: 10px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const msgs = document.getElementById('messages');
+    const input = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const micBtn = document.getElementById('mic-btn');
+    const typing = document.getElementById('typing');
+    const bizId = "{{ business.id }}";
+
+    // Speech Recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.onstart = () => { micBtn.style.background = '#EF4444'; input.placeholder = "Listening..."; };
+        recognition.onresult = (e) => { input.value = e.results[0][0].transcript; submit(); };
+        recognition.onend = () => { micBtn.style.background = '#475569'; input.placeholder = "Ask me something..."; };
+    }
+    micBtn.onclick = () => recognition.start();
+
+    function append(text, isUser, products = []) {
+        const div = document.createElement('div');
+        div.className = `msg ${isUser ? 'user' : 'bot'}`;
+        
+        // এআই-এর টেক্সট থেকে ইমেজ এবং লিংক পার্স করা
+        if (!isUser) {
+            // ১. ইমেজ পার্স করা: ![alt](url) -> <img src="url">
+            text = text.replace(/!\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank"><img src="$2" style="max-width:100%; border-radius:12px; margin-top:10px; cursor:pointer;" alt="$1"></a>');
+            // ২. লিংক পার্স করা: [text](url) -> <a href="url">text</a> (বাকি লিংকগুলোও হ্যান্ডেল করবে)
+            text = text.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:var(--primary); font-weight:600;">$1</a>');
+            
+            div.innerHTML = text.replace(/\n/g, '<br>');
+        } else {
+            div.textContent = text;
+        }
+
+        msgs.appendChild(div);
+
+        if (products && products.length > 0) {
+            products.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'prod-card';
+                card.innerHTML = `
+                    ${p.image ? `<img src="${p.image}">` : ''}
+                    <div class="prod-title">${p.name}</div>
+                    <div class="prod-price">${p.price}</div>
+                    <a href="${p.link}" target="_blank" class="prod-btn">View Product</a>
+                `;
+                msgs.appendChild(card);
+            });
+        }
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    async function submit() {
+        const text = input.value.trim();
+        if(!text) return;
+        append(text, true);
+        input.value = ''; input.disabled = true; typing.style.display = 'block';
+
+        try {
+            const resp = await fetch(`/api/chat/${bizId}/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+                body: JSON.stringify({ message: text })
+            });
+            const data = await resp.json();
+            typing.style.display = 'none';
+            append(data.answer, false, data.products);
+            speak(data.answer);
+        } catch (e) {
+            typing.style.display = 'none';
+            append("Error connecting to server.", false);
+        } finally {
+            input.disabled = false; input.focus();
+        }
+    }
+
+    function speak(text) {
+        if ('speechSynthesis' in window) {
+            const ut = new SpeechSynthesisUtterance(text);
+            ut.lang = 'en-US';
+            window.speechSynthesis.speak(ut);
+        }
+    }
+
+    sendBtn.onclick = submit;
+    input.onkeypress = (e) => { if(e.key === 'Enter') submit(); }
+</script>
+</body>
+</html>

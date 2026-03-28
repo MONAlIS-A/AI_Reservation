@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with {{ business.name }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #7C73FF;
+            --bg-light: #F3F4F6;
+            --chat-bg: #FFFFFF;
+            --text-main: #1F2937;
+            --text-dim: #6B7280;
+            --border-color: #E5E7EB;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-light);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #chat-container {
+            width: 400px;
+            height: 600px;
+            background: var(--chat-bg);
+            border-radius: 20px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .chat-header {
+            padding: 20px;
+            background: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #F9FAFB;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 15px;
+            font-size: 14px;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background: white;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 2px;
+        }
+
+        /* Product Card Styling */
+        .product-card {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px;
+            margin-top: 10px;
+            max-width: 250px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        .product-card img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            background: #eee;
+        }
+
+        .product-info {
+            padding: 8px 0;
+        }
+
+        .product-name {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: var(--text-main);
+        }
+
+        .product-price {
+            color: var(--primary-color);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .product-link {
+            display: block;
+            text-align: center;
+            background: var(--primary-color);
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 12px;
+            margin-top: 8px;
+            transition: opacity 0.2s;
+        }
+
+        .product-link:hover { opacity: 0.9; }
+
+        .chat-input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 10px;
+        }
+
+        #user-input {
+            flex: 1;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 15px;
+            outline: none;
+        }
+
+        #send-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .typing { font-style: italic; color: var(--text-dim); font-size: 12px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <div class="chat-header">
+        <div style="width: 8px; height: 8px; background: #4ADE80; border-radius: 50%;"></div>
+        <h3 style="margin:0; font-size:16px;">Chat with {{ business.name }}</h3>
+    </div>
+    <div id="chat-messages">
+        <div class="message bot-message">
+            Hello! I'm here to help you with information about <strong>{{ business.name }}</strong>. What's on your mind?
+        </div>
+    </div>
+    <div class="chat-input-area">
+        {% csrf_token %}
+        <input type="text" id="user-input" placeholder="Ask a question..." autocomplete="off">
+        <button id="send-btn">Send</button>
+    </div>
+</div>
+
+<script>
+    const chatMessages = document.getElementById('chat-messages');
+    const userInput = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const businessId = "{{ business.id }}";
+
+    function addMessage(text, isUser, products = []) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+        
+        if (!isUser) {
+            // ১. ইমেজ পার্স করা এবং সেটিতে লিংক যোগ করা
+            text = text.replace(/!\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank"><img src="$2" style="max-width:100%; border-radius:12px; margin-top:10px; cursor:pointer;" alt="$1"></a>');
+            // ২. জেনারিক লিংক পার্স করা
+            text = text.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:#FFF; text-decoration:underline; font-weight:600;">$1</a>');
+            
+            msgDiv.innerHTML = text.replace(/\n/g, '<br>');
+        } else {
+            msgDiv.textContent = text;
+        }
+
+        chatMessages.appendChild(msgDiv);
+
+        // প্রোডাক্ট কার্ড রেন্ডার করা
+        if (products && products.length > 0) {
+            products.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                card.innerHTML = `
+                    ${p.image ? `<img src="${p.image}" alt="${p.name}">` : ''}
+                    <div class="product-info">
+                        <div class="product-name">${p.name}</div>
+                        <div class="product-price">${p.price}</div>
+                        ${p.link ? `<a href="${p.link}" target="_blank" class="product-link">View Details</a>` : ''}
+                    </div>
+                `;
+                chatMessages.appendChild(card);
+            });
+        }
+
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        addMessage(text, true);
+        userInput.value = '';
+        userInput.disabled = true;
+
+        const typing = document.createElement('div');
+        typing.className = 'typing';
+        typing.textContent = 'Thinking...';
+        chatMessages.appendChild(typing);
+
+        try {
+            const response = await fetch(`/api/chat/${businessId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ message: text })
+            });
+
+            const data = await response.json();
+            chatMessages.removeChild(typing);
+            addMessage(data.answer, false, data.products);
+        } catch (error) {
+            if (typing.parentNode) chatMessages.removeChild(typing);
+            addMessage("Sorry, I encountered an error connecting to the server.", false);
+        } finally {
+            userInput.disabled = false;
+            userInput.focus();
+        }
+    }
+
+    sendBtn.onclick = sendMessage;
+    userInput.onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); }
+</script>
+
+</body>
+</html>
