@@ -1,35 +1,19 @@
-import os
-import django
+import os, django, asyncio, json
+import sys
 
-# Set up Django environment
+# Setup Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ai_reservation.settings')
 django.setup()
 
-from business.rag import build_pipeline_and_get_db
+from business.rag import aget_global_rag_answer
 
-print("Starting tests...")
-# 1. Pipeline Test
-vector_db = build_pipeline_and_get_db()
-
-if vector_db:
-    print("\n--------------------------")
-    print("SIMILARITY SEARCH TEST")
-    print("--------------------------\n")
-    
-    # 2. Similarity Search Test
-    query = "Something related to AI and technology"
-    print(f"Query: '{query}'")
-    
+async def test():
     try:
-        results = vector_db.similarity_search(query, k=2)
-        print(f"\nFound {len(results)} matches!")
-        for i, doc in enumerate(results):
-            print(f"\nMatch #{i+1} (Business: {doc.metadata.get('name')}):")
-            print(f"{doc.page_content}")
-            print("-" * 20)
+        ans = await aget_global_rag_answer("Hi, list all businesses.")
+        print(f"--- ANSWER ---\n{ans}")
     except Exception as e:
-        print(f"Error during search: {e}")
-        
-    print("\nEverything is working perfectly!")
-else:
-    print("\nDatabase returned None. Make sure you have at least one business saved via your form with a description!")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    asyncio.run(test())

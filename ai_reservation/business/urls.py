@@ -3,6 +3,10 @@ from . import views
 
 urlpatterns = [
     path("create/", views.create_business, name="create_business"),
+    # Dashboard / Global search
+    path("", views.global_chat_page, name="global_chat_page"),
+    path("api/global-chat/", views.global_chat_api, name="global_chat_api"),
+    
     # Browser URL (Page): Uses business_name for clean looks
     path("chat/<str:business_name>/", views.chatbot_page, name="chatbot_page"),
     # AI Receptionist Page (Floating Avatar view)

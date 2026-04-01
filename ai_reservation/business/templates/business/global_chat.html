@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global AI Discovery | Multi-Business Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --accent: #10B981;
+            --bg-dark: #0F172A;
+            --card-glass: rgba(255, 255, 255, 0.05);
+            --border-glass: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            color: #F8FAFC;
+        }
+
+        .discovery-panel {
+            width: 40%;
+            background: linear-gradient(145deg, #1E293B, #0F172A);
+            padding: 80px 50px;
+            display: flex; flex-direction: column; justify-content: center;
+            border-right: 1px solid var(--border-glass);
+            z-index: 2;
+        }
+
+        .icon-discovery {
+            width: 80px; height: 80px;
+            background: rgba(79, 70, 229, 0.2);
+            border-radius: 20px;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 30px;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+
+        h1 { font-size: 3.5rem; margin: 0; font-weight: 600; letter-spacing: -2px; line-height: 1; }
+        .biz-accent { color: var(--primary); display: block; }
+        p.tagline { color: #94A3B8; font-size: 1.3rem; margin: 25px 0 45px; max-width: 400px; line-height: 1.4; }
+
+        .chat-area {
+            flex: 1; display: flex; flex-direction: column;
+            padding: 40px; background: #0F172A; position: relative;
+        }
+
+        #messages {
+            flex: 1; overflow-y: auto; padding: 10px;
+            display: flex; flex-direction: column; gap: 20px;
+        }
+
+        .msg {
+            max-width: 80%; padding: 20px 25px; border-radius: 28px;
+            font-size: 1.1rem; line-height: 1.6;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        .bot { background: var(--card-glass); border: 1px solid var(--border-glass); align-self: flex-start; border-bottom-left-radius: 4px; }
+        .user { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 4px; box-shadow: 0 10px 30px rgba(79, 70, 229, 0.25); }
+
+        .input-bar-container {
+            margin-top: 30px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-glass);
+            border-radius: 35px; padding: 12px 12px 12px 35px;
+            display: flex; align-items: center; backdrop-filter: blur(20px);
+        }
+
+        input { background: transparent; border: none; color: white; flex: 1; font-size: 1.2rem; outline: none; }
+        .btn-action { background: var(--primary); color: white; border: none; width: 55px; height: 55px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        .btn-action:hover { transform: scale(1.05) translateY(-2px); box-shadow: 0 5px 15px rgba(79, 70, 229, 0.4); }
+
+        .typing-indicator { color: var(--primary); font-size: 0.95rem; margin-bottom: 15px; display: none; font-weight: 500; }
+    </style>
+</head>
+<body>
+
+<div class="discovery-panel">
+    <div class="icon-discovery">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="40" height="40"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </div>
+    <h1>Global AI <span class="biz-accent">Discovery</span></h1>
+    <p class="tagline">Search for services across all our partner businesses and track your bookings in one place.</p>
+</div>
+
+<div class="chat-area">
+    <div id="messages">
+        <!-- Initial messages will be populated by AI -->
+    </div>
+    
+    <div class="typing-indicator" id="typing">Voyager is retrieving partner network...</div>
+
+    <div class="input-container">
+        {% csrf_token %}
+        <div class="input-bar-container">
+            <input type="text" id="user-input" placeholder="Ask about any service..." autocomplete="off">
+            <button class="btn-action" id="send-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const msgs = document.getElementById('messages');
+    const input = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const typing = document.getElementById('typing');
+
+    function append(text, isUser) {
+        const div = document.createElement('div');
+        div.className = `msg ${isUser ? 'user' : 'bot'}`;
+        
+        if (!isUser) {
+            // Parse Markdown links: [text](url) -> <a href="url">text</a>
+            text = text.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:#60A5FA; font-weight:600; text-decoration: underline;">$1</a>');
+            div.innerHTML = text.replace(/\n/g, '<br>');
+        } else {
+            div.textContent = text;
+        }
+
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    async function submit(customMsg = null) {
+        const text = customMsg || input.value.trim();
+        if(!text) return;
+
+        if(!customMsg) append(text, true);
+        
+        input.value = ''; input.disabled = true; typing.style.display = 'block';
+
+        try {
+            const resp = await fetch('/api/global-chat/', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
+                },
+                body: JSON.stringify({ message: text })
+            });
+            const data = await resp.json();
+            typing.style.display = 'none';
+            if(data.answer) {
+                append(data.answer, false);
+            }
+        } catch (e) {
+            typing.style.display = 'none';
+            append("An error occurred connecting to the global agent.", false);
+        } finally {
+            input.disabled = false; input.focus();
+        }
+    }
+
+    window.onload = () => {
+        // Automatically ask AI for business list on load
+        submit("Hello! Please list all available businesses and a one-line description of their services. Then ask me which business I'd like to explore.");
+    };
+
+    sendBtn.onclick = () => submit();
+    input.onkeypress = (e) => { if(e.key === 'Enter') submit(); }
+</script>
+
+</body>
+</html>
