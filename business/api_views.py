@@ -23,6 +23,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 class GlobalChatAPIView(APIView):
     """
     DRF version of the Global Multi-Business search.
+    Supports both GET (auto-greeting) and POST (user message) requests.
     """
     authentication_classes = [] # Disable auth to avoid Session/ORM sync error in async context
     permission_classes = []
