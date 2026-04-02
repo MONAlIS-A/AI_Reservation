@@ -79,3 +79,4 @@ djangorestframework
 
 psycopg2-binary
 drf-yasg
+dj-database-url
