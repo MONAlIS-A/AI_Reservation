@@ -95,7 +95,7 @@
 
 <div class="chat-area">
     <div id="messages">
-        <!-- Initial messages will be populated by AI -->
+        <div class="msg bot">Hello! 😊 I'm your AI Discovery Assistant. How can I help you today? What kind of service or business are you looking for?</div>
     </div>
     
     <div class="typing-indicator" id="typing">Voyager is retrieving partner network...</div>
@@ -165,7 +165,7 @@
 
     window.onload = () => {
         // Automatically ask AI for business list on load
-        submit("Hello! Please list all available businesses and a one-line description of their services. Then ask me which business I'd like to explore.");
+        submit("Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today.");
     };
 
     sendBtn.onclick = () => submit();

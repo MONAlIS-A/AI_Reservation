@@ -44,16 +44,26 @@ async def global_chat_api(request):
     Async API for global multi-business search.
     """
     from .rag import aget_global_rag_answer
+    if request.method == 'GET':
+        try:
+            user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
+            bot_answer = await aget_global_rag_answer(user_query)
+            return JsonResponse({'answer': bot_answer})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+            
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            user_query = data.get('message', '')
-            if not user_query: return JsonResponse({'error': 'No query'}, status=400)
+            user_query = data.get('message', '').strip()
+            if not user_query:
+                user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
             
             bot_answer = await aget_global_rag_answer(user_query)
             return JsonResponse({'answer': bot_answer})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+            
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 async def chat_api(request, business_id):

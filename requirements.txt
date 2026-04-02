@@ -76,3 +76,5 @@ zstandard==0.25.0
 gunicorn
 whitenoise
 djangorestframework
+
+psycopg2-binary

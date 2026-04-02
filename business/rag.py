@@ -26,7 +26,7 @@ def load_business_documents(business_id=None):
     docs = []
     for biz in businesses:
         if biz.description:
-            text = f"Business Name: {biz.name}\nDescription: {biz.description}\nWebsite: {biz.website_url}\nDomain: {biz.domain}"
+            text = f"Business Name: {biz.name}\nDescription: {biz.description}\nDomain: {biz.domain}"
             docs.append(Document(page_content=text, metadata={"business_id": biz.id, "business_name": biz.name}))
     return docs
 
@@ -113,7 +113,7 @@ async def run_tool(name, args, business_id=None, website_url=None):
                 businesses = await sync_to_async(lambda: list(Business.objects.all()))()
                 results = []
                 for biz in businesses:
-                    results.append(f"ID: {biz.id} | Display Name: {biz.name} | Slug: {biz.name} | Description Snippet: {biz.description[:100]}...")
+                    results.append(f"Business ID: {biz.id} | Name: {biz.name} | Slug: {biz.name} | Domain: {biz.domain} | Desc: {str(biz.description)[:100]}...")
                 return "\n".join(results)
             
             vector_db = await sync_to_async(build_pipeline_and_get_db)(business_id=None)
@@ -124,8 +124,8 @@ async def run_tool(name, args, business_id=None, website_url=None):
                     biz_id = d.metadata.get('business_id')
                     biz_name = d.metadata.get('business_name')
                     biz = await sync_to_async(Business.objects.get)(id=biz_id)
-                    results.append(f"ID: {biz_id} | Display Name: {biz_name} | Slug: {biz.name} | Description Snippet: {biz.description[:100]}...")
-                return "\n".join(results)
+                    results.append(f"Business: {biz_name} (Slug: {biz.name})\nDetails Section: {d.page_content}")
+                return "\n---\n".join(results)
         except Exception as e: return f"Error: {str(e)}"
         return "No businesses found matching this query."
 
@@ -342,21 +342,25 @@ async def aget_global_rag_answer(query):
     - Provide information as plain text. 
     - Use numbers (1., 2.) for lists.
     
-    COLLECTION & DISCOVERY:
-    - You MUST provide a full list of ALL available businesses and their services when the user greets you or asks for a list.
-    - Use 'search_across_businesses' with 'query=list all' to get this data.
-    - For each business, include its Name and a short line about what it offers.
+    GREETING & DISCOVERY:
+    - Welcome the user warmly and introduce yourself briefly as the AI Discovery Assistant.
+    - When the user greets you or asks for a list, you MUST provide a full list of ALL available businesses and their descriptions.
+    - ALWAYS use the tool 'search_across_businesses' with 'query=list all' to get this data.
+    - For each business, carefully read the retrieved database context and provide a brief, engaging summary of what it offers based ONLY on its description.
     
-    TASK 1: Service Inquiry
-    - If user asks for a specific service, use 'search_across_businesses' with their query.
-    - Ask the user to choose ONE of them to proceed.
+    TASK 1: Global Information Retrieval (STRICT REQUIRED STEP)
+    - Whenever the user asks ANY question about finding a service, business, product, or booking (e.g., "I want a haircut", "food", "doctors"), you MUST IMMEDIATELY execute the tool 'search_across_businesses' with their specific query.
+    - NEVER say "I don't know" or "I cannot see the database" without calling the tool first.
+    - Carefully read the retrieved context from the tool. Summarize the matching business NAMES and their offerings based ONLY on the retrieved details.
+    - Ask the user to choose ONE of the summarized businesses to proceed.
+    - If no relevant business is found in the tool's response, politely inform them.
     
-    TASK 2: Business Choice & Redirect
-    - When the user explicitly picks a business (e.g. "I want Rooftop" or "Let's go with ACME"):
-    - Immediately provide the DIRECT CLICKABLE LINK.
+    TASK 2: Business Choice & AI Receptionist Handoff
+    - If the user explicitly wants to take a service, schedule an appointment, or talk directly to a specific business:
+    - Immediately provide the DIRECT CLICKABLE LINK to that business's dedicated AI Receptionist.
     - FORMAT: [Click here to chat with {{Business Name}} AI Receptionist](/receptionist/{{Slug}}/)
-    - Example: "Great choice! 😊 You can now chat directly with the Rooftop receptionist here: [Click here to chat with Rooftop AI Receptionist](/receptionist/rooftop/)"
-    - DO NOT provide long descriptions or ask further questions. Just give the link and invite them to continue there.
+    - Example: "Great choice! 😊 You can now chat directly with the Rooftop receptionist here to finalize your booking: [Click here to chat with Rooftop AI Receptionist](/receptionist/rooftop/)"
+    - Do not perform the booking yourself. The dedicated AI Receptionist handles bookings and detailed conversations.
     
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """

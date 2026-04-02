@@ -27,16 +27,25 @@ class GlobalChatAPIView(APIView):
     authentication_classes = [] # Disable auth to avoid Session/ORM sync error in async context
     permission_classes = []
 
+    def get(self, request):
+        try:
+            user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
+            bot_answer = async_to_sync(aget_global_rag_answer)(user_query)
+            return Response({'answer': bot_answer})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def post(self, request):
-        user_query = request.data.get('message', '')
+        user_query = request.data.get('message', '').strip()
         if not user_query:
-            return Response({'error': 'No query provided'}, status=status.HTTP_400_BAD_REQUEST)
+            user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
         
         try:
             bot_answer = async_to_sync(aget_global_rag_answer)(user_query)
             return Response({'answer': bot_answer})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class ChatAPIView(APIView):
     """
