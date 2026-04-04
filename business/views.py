@@ -2,11 +2,14 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from .forms import BusinessForm
 from .models import Business
-from .rag import build_pipeline_and_get_db, aget_rag_answer_with_agent
-from asgiref.sync import sync_to_async
+from .rag import build_pipeline_and_get_db, aget_rag_answer_with_agent, aget_global_rag_answer
+from asgiref.sync import async_to_sync
 import json
-import re
 
+
+# -------------------------------
+# Business Creation
+# -------------------------------
 def create_business(request):
     if request.method == 'POST':
         form = BusinessForm(request.POST)
@@ -16,78 +19,111 @@ def create_business(request):
                 build_pipeline_and_get_db(business_id=business_instance.id)
             except Exception as e:
                 print(f"Embedding generation failed: {e}")
-            return redirect('create_business') 
+            return redirect('create_business')
     else:
         form = BusinessForm()
+
     return render(request, 'business/business_form.html', {'form': form})
 
+
+# -------------------------------
+# Pages
+# -------------------------------
 def chatbot_page(request, business_name):
     business = get_object_or_404(Business, name__iexact=business_name)
     return render(request, 'business/chatbot.html', {'business': business})
+
 
 def receptionist_page(request, business_name):
     business = get_object_or_404(Business, name__iexact=business_name)
     return render(request, 'business/receptionist.html', {'business': business})
 
+
 def ai_call_page(request, business_name):
     business = get_object_or_404(Business, name__iexact=business_name)
     return render(request, 'business/ai_call.html', {'business': business})
 
+
 def global_chat_page(request):
-    """
-    Standalone landing page for searching across all businesses.
-    """
     return render(request, 'business/global_chat.html')
 
-async def global_chat_api(request):
-    """
-    Async API for global multi-business search.
-    """
-    from .rag import aget_global_rag_answer
-    if request.method == 'GET':
-        try:
-            user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
-            bot_answer = await aget_global_rag_answer(user_query)
-            return JsonResponse({'answer': bot_answer})
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-            
+
+# -------------------------------
+# GLOBAL CHAT API (SYNC FIXED)
+# -------------------------------
+def global_chat_api(request):
+
+    if 'global_chat_history' not in request.session:
+        request.session['global_chat_history'] = []
+
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            user_query = data.get('message', '').strip()
-            if not user_query:
-                user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
-            
-            bot_answer = await aget_global_rag_answer(user_query)
+            user_query = data.get('message', '').strip() or "Hello!"
+
+            history = request.session.get('global_chat_history', [])
+
+            # ✅ Run async function safely in sync view
+            bot_answer = async_to_sync(aget_global_rag_answer)(
+                user_query,
+                chat_history=history
+            )
+
+            # Save history
+            history.append({'role': 'user', 'content': user_query})
+            history.append({'role': 'assistant', 'content': bot_answer})
+
+            request.session['global_chat_history'] = history[-10:]
+            request.session.modified = True
+
             return JsonResponse({'answer': bot_answer})
+
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-            
+
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-async def chat_api(request, business_id):
-    """
-    Asynchronous API endpoint for the AI Agent.
-    Handles multiple concurrent users/businesses using async/await.
-    """
+
+# -------------------------------
+# BUSINESS CHAT API (SYNC FIXED)
+# -------------------------------
+def chat_api(request, business_id):
+
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             user_query = data.get('message', '')
-            
+
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
-                
-            # Calling the ASYNC version of the agent
-            bot_answer = await aget_rag_answer_with_agent(business_id, user_query)
-            
+
+            session_key = f'chat_history_{business_id}'
+
+            if session_key not in request.session:
+                request.session[session_key] = []
+
+            history = request.session[session_key]
+
+            # ✅ Run async RAG agent safely
+            bot_answer = async_to_sync(aget_rag_answer_with_agent)(
+                business_id,
+                user_query,
+                chat_history=history
+            )
+
+            # Update history
+            history.append({'role': 'user', 'content': user_query})
+            history.append({'role': 'assistant', 'content': bot_answer})
+
+            request.session[session_key] = history[-10:]
+            request.session.modified = True
+
             return JsonResponse({
                 'answer': bot_answer,
-                'products': [] 
+                'products': []
             })
-            
+
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-            
+
     return JsonResponse({'error': 'Invalid request method'}, status=405)

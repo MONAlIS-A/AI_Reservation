@@ -167,7 +167,8 @@ class ChatAPIView(APIView):
             return Response({'error': 'No message provided'}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
-            bot_answer = async_to_sync(aget_rag_answer_with_agent)(business_id, user_query)
+            history = request.data.get('history', [])
+            bot_answer = async_to_sync(aget_rag_answer_with_agent)(business_id, user_query, chat_history=history)
             return Response({'answer': bot_answer, 'products': []})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

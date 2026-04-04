@@ -1,0 +1,8 @@
+The Anti-Dandruff Shampoo is available for purchase. 
+
+1. Product Name: Anti-Dandruff Shampoo
+2. Product Image: ![Shampoo](https://images.unsplash.com/photo-1594132176008-0e9e422f25d9?q=80&w=200)
+3. Price: Available upon request.
+4. Clickable Link: [Get it now](https://example.com/shampoo)
+
+To book an appointment, please provide your name, email, date, and preferred time.

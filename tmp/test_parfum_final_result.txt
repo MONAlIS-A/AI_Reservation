@@ -1,0 +1,6 @@
+Product Name: Eau de Parfum - Floral Scent  
+Price: $35.00  
+![Eau de Parfum - Floral Scent](https://kolzsticks.github.io/Free-Ecommerce-Products-Api/main/images/products/perfume.jpg)  
+[View Product](https://kolzsticks.github.io/Free-Ecommerce-Products-Api/main/images/products/perfume.jpg)  
+
+This captivating scent envelops you in elegance, making it perfect for any occasion, leaving a lasting impression.

@@ -131,7 +131,7 @@
 
 <div class="chat-main">
     <div id="messages">
-        <div class="msg bot">Hello! I am the automated front-desk assistant for {{ business.name }}. How can I help you today?</div>
+        <div class="msg bot">AI Reservation Assistant for {{ business.name }}. State your requirement or request a service for processing.</div>
     </div>
     <div class="typing" id="typing">Assistant is thinking...</div>
     <div class="input-container">
@@ -173,10 +173,11 @@
         
         // এআই-এর টেক্সট থেকে ইমেজ এবং লিংক পার্স করা
         if (!isUser) {
-            // ১. ইমেজ পার্স করা: ![alt](url) -> <img src="url">
-            text = text.replace(/!\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank"><img src="$2" style="max-width:100%; border-radius:12px; margin-top:10px; cursor:pointer;" alt="$1"></a>');
-            // ২. লিংক পার্স করা: [text](url) -> <a href="url">text</a> (বাকি লিংকগুলোও হ্যান্ডেল করবে)
-            text = text.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:var(--primary); font-weight:600;">$1</a>');
+            // ১. ইমেজ পার্স করা: ![alt](url) -> <img> (handles optional spaces)
+            text = text.replace(/!\[(.*?)\]\s?\((.*?)\)/g, '<div style="margin:10px 0;"><a href="$2" target="_blank"><img src="$2" style="max-width:100%; border-radius:16px; border: 1px solid var(--border-glass); box-shadow: 0 10px 30px rgba(0,0,0,0.4);" alt="$1"></a></div>');
+            
+            // ২. লিংক পার্স করা: [text](url) -> <a> (handles optional spaces)
+            text = text.replace(/\[(.*?)\]\s?\((.*?)\)/g, '<a href="$2" target="_blank" style="color:var(--primary); font-weight:600; text-decoration: underline;">$1</a>');
             
             div.innerHTML = text.replace(/\n/g, '<br>');
         } else {

@@ -29,7 +29,7 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = 'django-insecure-q#7uk-rgr5x08%lcy!n52ezi0iz92v2wn#g-gw0j4j&s@pyyaw'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'business',
     'rest_framework',
     'drf_yasg',
+    'corsheaders',
 ]
 
 REST_FRAMEWORK = {
@@ -54,15 +55,23 @@ REST_FRAMEWORK = {
     ],
 }
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://ai-reservation-crm-system.onrender.com",
+]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    
 ]
 
 ROOT_URLCONF = 'django_project.urls'

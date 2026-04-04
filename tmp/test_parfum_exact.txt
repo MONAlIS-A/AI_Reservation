@@ -1,0 +1,6 @@
+Please provide the following details to proceed with the booking:
+
+1. Your full name
+2. Your email address
+3. The date (YYYY-MM-DD format)
+4. The time (HH:MM format)

@@ -56,17 +56,50 @@ def build_pipeline_and_get_db(business_id=None):
     chunks = split_documents(docs)
     return generate_vector_db(chunks)
 
-def scrape_business_website(url):
+def scrape_business_website(url, query=""):
     try:
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         if response.status_code == 200:
+            # Try JSON first
+            try:
+                data = response.json()
+                if isinstance(data, list) and query:
+                    import re
+                    q_clean = re.sub(r'[^\w\s]', '', query.lower())
+                    stop_words = {'is', 'are', 'available', 'available', 'show', 'name', 'price', 'image', 'link', 'details', 'for', 'the', 'and'}
+                    keywords = [w for w in q_clean.split() if len(w) > 2 and w not in stop_words]
+                    scored_items = []
+                    for item in data:
+                        item_str = json.dumps(item).lower()
+                        score = sum(1 for k in keywords if k in item_str)
+                        if score > 0: scored_items.append((score, item))
+                    if scored_items:
+                        scored_items.sort(key=lambda x: x[0], reverse=True)
+                        return json.dumps([x[1] for x in scored_items[:2]], indent=2)
+                return json.dumps(data, indent=2)[:15000]
+            except Exception:
+                pass
+            
+            # Case HTML
             soup = BeautifulSoup(response.text, 'lxml') or BeautifulSoup(response.text, 'html.parser')
-            for tag in ["script", "style", "nav", "footer", "header"]:
+            for tag in ["script", "style"]:
                 for s in soup(tag): s.decompose()
-            clean_text = '\n'.join(line.strip() for line in soup.get_text(separator='\n').splitlines() if line.strip())
-            return clean_text[:8000] 
-    except Exception: return ""
-    return ""
+            elements = []
+            for img in soup.find_all('img', src=True):
+                alt = img.get('alt', 'Product Image')
+                src = img['src']
+                if not src.startswith('http'): src = f"{url.rstrip('/')}/{src.lstrip('/')}"
+                elements.append(f"Image: ![ {alt} ]({src})")
+            for a in soup.find_all('a', href=True):
+                title = a.get_text().strip() or "View Link"
+                href = a['href']
+                if not href.startswith('http'): href = f"{url.rstrip('/')}/{href.lstrip('/')}"
+                elements.append(f"Link: [ {title} ]({href})")
+            clean_text = soup.get_text(separator=' ')
+            full_context = f"Website Text Content: {clean_text[:4000]}\n\nFound Media/Links:\n" + "\n".join(elements[:30])
+            return full_context[:8000] 
+    except Exception: return "Error scraping the target URL."
+    return "No content retrieved."
 
 # --- Manual Tool Runner ---
 async def run_tool(name, args, business_id=None, website_url=None):
@@ -83,14 +116,18 @@ async def run_tool(name, args, business_id=None, website_url=None):
         return "No docs found."
     
     elif name == "search_website":
-        # Dynamic website override from tool args if provided
-        exec_url = args.get("url", website_url or args.get("url"))
+        # Dynamic website and query override
+        exec_url = args.get("url", website_url)
+        search_query = args.get("query", "")
         if not exec_url and exec_biz_id:
             try:
                 biz = await sync_to_async(Business.objects.get)(id=exec_biz_id)
                 exec_url = biz.website_url
             except Exception: pass
-        return scrape_business_website(exec_url) if exec_url else "No website available."
+        if not exec_url: return "No website available to search."
+        
+        content = scrape_business_website(exec_url, query=search_query)
+        return content
     
     elif name == "check_calendar":
         res = await sync_to_async(get_slots)(exec_biz_id, args.get('date'))
@@ -136,14 +173,22 @@ async def run_tool(name, args, business_id=None, website_url=None):
         )
         return json.dumps(res)
     
+    elif name == "web_search":
+        try:
+            from langchain_community.tools import DuckDuckGoSearchRun
+            search = DuckDuckGoSearchRun()
+            return search.run(args.get("query", ""))
+        except Exception as e:
+            return f"Web search error: {str(e)}"
+    
     return "Unknown tool."
 
-async def aget_rag_answer_with_agent(business_id, query):
+async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     try:
         biz = await sync_to_async(Business.objects.get)(id=business_id)
     except Exception: return "Business not found."
 
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.5)
     
     tools = [
         {
@@ -158,8 +203,15 @@ async def aget_rag_answer_with_agent(business_id, query):
             "type": "function",
             "function": {
                 "name": "search_website",
-                "description": "Checks business website for real-time info.",
-                "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}
+                "description": "Search the business website for specific real-time info like products, prices, and links.",
+                "parameters": {
+                    "type": "object", 
+                    "properties": {
+                        "url": {"type": "string"},
+                        "query": {"type": "string"}
+                    }, 
+                    "required": ["query"]
+                }
             }
         },
         {
@@ -201,60 +253,86 @@ async def aget_rag_answer_with_agent(business_id, query):
                     "required": ["email", "service_name"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "Searches the internet for product prices, images, and links if not found locally.",
+                "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+            }
         }
     ]
     
     system_prompt = f"""
-    You are a professional, warm, and highly empathetic AI Receptionist for '{biz.name}' ({biz.domain}). 
-    Your goal is to make the user feel welcome and well-cared for. Use friendly emojis where appropriate.
+    INTENT & QUERY ANALYSIS:
+    - Step 1: Detect User Intent. 
+    - **Intent A (Inquiry)**: If user asks about availability or prices (e.g. "Is X available?").
+      - YOU MUST: Search docs/website. 
+      - YOU MUST: Clearly display: **Product Name**, **Price** (if cent, convert to $), **Markdown Image**, and **Clickable Link**.
+      - **CRITICAL**: Do NOT mention booking or data collection yet.
+    - **Intent B (Booking)**: ONLY if user explicitly says they want to book or reserve, transition to DATA COLLECTION. 
+    
+    OPERATIONAL GUIDELINES:
+    - For inquiries: Show the product information cards/text clearly. STOP there.
+    - If a user says "X is available", accept it and move to Intent B.
+    - Price Conversion: `priceCents` 3500 becomes `$35.00`.
+    - No emotional fillers. Strictly professional.
+    
+    SHORT MEMORY & CONTEXT:
+    - Identify details. Convert 'tomorrow' to `YYYY-MM-DD`.
+    
+    FORMATTING: No asterisks. No emojis. Numbers for lists.
+
+    SHORT MEMORY & CONTEXT:
+    - Automatically identify or calculate details (Name, Email, Service, Date, Time).
+    - Convert relative dates like 'tomorrow' into `YYYY-MM-DD` using current time.
 
     FORMATTING RULES:
-    - DO NOT use asterisks (*) or double asterisks (**) for bolding or bullet points.
-    - Provide information as plain text. 
-    - Use numbers (1., 2.) for lists.
+    - No asterisks. No emojis. Plain text only. Use numbers for lists.
 
-    DATA COLLECTION RULES FOR BOOKING:
-    - You MUST explicitly and warmly ask for these 5 things:
-      1. User Name
-      2. User Email
-      3. Service Name (e.g., 'What service would you like at {biz.name}?')
-      4. Date (YYYY-MM-DD)
-      5. Time (HH:MM or HH:MM AM/PM)
+    DATA COLLECTION & PARAMETERS (FOR BOOKING):
+    1. Your full name (Map to `customer_name`)
+    2. Your email address (Map to `customer_email`)
+    3. The service name (Map to `service_name`)
+    4. Date (YYYY-MM-DD format)
+    5. Time (HH:MM format)
     
-    SERVICE DETAILS & IMAGES:
-    - When a user asks about services, use 'search_documentation' and 'search_website' to find DETAILS.
-    - If you find images (e.g., Markdown images ![alt](url)), always show them.
-    - Describe the services with passion and explain why they are great!
+    - **CRITICAL**: Combine Date and Time into ISO string `YYYY-MM-DDTHH:MM:SS` for the 'start_time' parameter.
+    
+    BOOKING EXECUTION (STRICT):
+    1. Check Slot: Call 'check_calendar' for the specified date once you have the 5 parameters.
+    2. Confirm: If the tool result shows the slot is free, call 'book_appointment' IMMEDIATELY.
+    3. Busy: If the tool result shows the slot is occupied, inform the user and suggest next slots.
+    4. NO CONFIRMATION: Do not ask for user permission before executing these tools.
 
-    BOOKING FLOW (STRICT):
-    1. Once you have ALL 5 details, YOU MUST call 'check_calendar' IMMEDIATELY for that date.
-    2. Analyze the calendar data. If the specific time is NOT in the booked list, YOU MUST call 'book_appointment' IMMEDIATELY.
-    3. **CRITICAL**: DO NOT tell the user to "wait", "one moment", or that you will "get back to them". 
-    4. YOU MUST execute the tools and provide the FINAL confirmation or rejection in the SAME response.
-    
-    CONFIRMATION MESSAGE FORMAT:
-       "Booking Confirmed! 🎉
-       - Business: {biz.name}
-       - Service: [Service Name]
-       - Name: [User Name]
-       - Email: [User Email]
-       - Date & Time: [Date] at [Time]
-       We are so excited to see you there! See you soon!"
-    
-    If the slot is busy, explain why kindly and suggest the next available slot immediately.
+    CONFIRMATION FORMAT (REQUIRED):
+       Booking Confirmed:
+       1. Business: {biz.name}
+       2. Service: [Service Name]
+       3. Name: [User Name]
+       4. Email: [User Email]
+       5. Date & Time: [Date] at [Time]
     
     GENERAL RULES:
-    - Use 'search_documentation' for business info.
-    - Use 'search_website' if docs don't have the answer.
-    - If checking status, ask for Email and Service Name, then use 'check_booking_status'.
+    - Use 'search_documentation' for technical business info.
+    - Use 'search_website' for external links if needed.
+    - For status checks, use 'check_booking_status' with the provided email.
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
     
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query)
-    ]
+    messages = [SystemMessage(content=system_prompt)]
+    
+    # Add history
+    if chat_history:
+        for msg in chat_history:
+            if msg.get('role') == 'user':
+                messages.append(HumanMessage(content=msg['content']))
+            elif msg.get('role') == 'assistant':
+                messages.append(AIMessage(content=msg['content']))
+                
+    messages.append(HumanMessage(content=query))
     
     chat_with_tools = llm.bind_tools(tools)
     
@@ -272,11 +350,11 @@ async def aget_rag_answer_with_agent(business_id, query):
 
     return messages[-1].content
 
-async def aget_global_rag_answer(query):
+async def aget_global_rag_answer(query, chat_history=None):
     """
     Agent that works across ALL businesses.
     """
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.5)
     
     tools = [
         {
@@ -331,44 +409,50 @@ async def aget_global_rag_answer(query):
                     "required": ["email", "service_name"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "Searches the internet for products, prices, and links.",
+                "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+            }
         }
     ]
     
     system_prompt = f"""
-    You are 'Multi-Business AI Discovery'. You are warm, empathetic, and professional. 😊
+    You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
+    
+    SHORT MEMORY & CONTEXT:
+    - Use conversation history to guide the user.
     
     FORMATTING RULES:
-    - DO NOT use asterisks (*) or double asterisks (**) for bolding or bullet points in business or product descriptions.
-    - Provide information as plain text. 
-    - Use numbers (1., 2.) for lists.
+    - No asterisks. Plain text only. Use numbers for lists.
     
     GREETING & DISCOVERY:
-    - Welcome the user warmly and introduce yourself briefly as the AI Discovery Assistant.
-    - When the user greets you or asks for a list, you MUST provide a full list of ALL available businesses and their descriptions.
-    - ALWAYS use the tool 'search_across_businesses' with 'query=list all' to get this data.
-    - For each business, carefully read the retrieved database context and provide a brief, engaging summary of what it offers based ONLY on its description.
+    - ALWAYS use 'search_across_businesses' with 'query=list all' if greeting the user.
+    - If a user asks for a specific product, use 'web_search' or 'search_website' if you have the business ID.
     
-    TASK 1: Global Information Retrieval (STRICT REQUIRED STEP)
-    - Whenever the user asks ANY question about finding a service, business, product, or booking (e.g., "I want a haircut", "food", "doctors"), you MUST IMMEDIATELY execute the tool 'search_across_businesses' with their specific query.
-    - NEVER say "I don't know" or "I cannot see the database" without calling the tool first.
-    - Carefully read the retrieved context from the tool. Summarize the matching business NAMES and their offerings based ONLY on the retrieved details.
-    - Ask the user to choose ONE of the summarized businesses to proceed.
-    - If no relevant business is found in the tool's response, politely inform them.
+    TASK 1: Global Information Retrieval
+    - If user asks for any service/product info, search documentation and website first, then fallback to 'web_search'.
+    - If found: You MUST show Name, Price, Image, and Link.
     
-    TASK 2: Business Choice & AI Receptionist Handoff
-    - If the user explicitly wants to take a service, schedule an appointment, or talk directly to a specific business:
-    - Immediately provide the DIRECT CLICKABLE LINK to that business's dedicated AI Receptionist.
-    - FORMAT: [Click here to chat with {{Business Name}} AI Receptionist](/receptionist/{{Slug}}/)
-    - Example: "Great choice! 😊 You can now chat directly with the Rooftop receptionist here to finalize your booking: [Click here to chat with Rooftop AI Receptionist](/receptionist/rooftop/)"
-    - Do not perform the booking yourself. The dedicated AI Receptionist handles bookings and detailed conversations.
+    TASK 2: Handoff
+    - Provide the direct chat link: [/receptionist/{{Slug}}/]
     
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=query)
-    ]
+    messages = [SystemMessage(content=system_prompt)]
+    
+    if chat_history:
+        for msg in chat_history:
+            if msg.get('role') == 'user':
+                messages.append(HumanMessage(content=msg['content']))
+            elif msg.get('role') == 'assistant':
+                messages.append(AIMessage(content=msg['content']))
+
+    messages.append(HumanMessage(content=query))
     
     chat_with_tools = llm.bind_tools(tools)
     
@@ -379,7 +463,6 @@ async def aget_global_rag_answer(query):
             if not response.tool_calls:
                 break
             for tool_call in response.tool_calls:
-                # Use None for defaults as the tools should now specify IDs in args
                 res = await run_tool(tool_call["name"], tool_call["args"], None, None)
                 messages.append(ToolMessage(tool_call_id=tool_call["id"], content=str(res)))
         except Exception as e:
@@ -387,6 +470,6 @@ async def aget_global_rag_answer(query):
 
     return messages[-1].content
 
-def get_rag_answer_with_agent(business_id, query):
+def get_rag_answer_with_agent(business_id, query, chat_history=None):
     import asyncio
-    return asyncio.run(aget_rag_answer_with_agent(business_id, query))
+    return asyncio.run(aget_rag_answer_with_agent(business_id, query, chat_history))

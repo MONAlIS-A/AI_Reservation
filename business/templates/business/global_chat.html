@@ -95,7 +95,7 @@
 
 <div class="chat-area">
     <div id="messages">
-        <div class="msg bot">Hello! 😊 I'm your AI Discovery Assistant. How can I help you today? What kind of service or business are you looking for?</div>
+        <div class="msg bot">Multi-Business Discovery Assistant. Connecting to partner network...</div>
     </div>
     
     <div class="typing-indicator" id="typing">Voyager is retrieving partner network...</div>
@@ -122,8 +122,11 @@
         div.className = `msg ${isUser ? 'user' : 'bot'}`;
         
         if (!isUser) {
-            // Parse Markdown links: [text](url) -> <a href="url">text</a>
-            text = text.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:#60A5FA; font-weight:600; text-decoration: underline;">$1</a>');
+            // ১. ইমেজ পার্স করা (New support added)
+            text = text.replace(/!\[(.*?)\]\s?\((.*?)\)/g, '<div style="margin:10px 0;"><a href="$2" target="_blank"><img src="$2" style="max-width:100%; border-radius:12px; border: 1px solid var(--border-glass);" alt="$1"></a></div>');
+            // ২. লিংক পার্স করা (Improved)
+            text = text.replace(/\[(.*?)\]\s?\((.*?)\)/g, '<a href="$2" target="_blank" style="color:#60A5FA; font-weight:600; text-decoration: underline;">$1</a>');
+            
             div.innerHTML = text.replace(/\n/g, '<br>');
         } else {
             div.textContent = text;
@@ -165,7 +168,7 @@
 
     window.onload = () => {
         // Automatically ask AI for business list on load
-        submit("Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today.");
+        submit("Identify yourself as the 'Multi-Business Discovery Assistant'. List all businesses concisely and request input on which service the user requires.");
     };
 
     sendBtn.onclick = () => submit();
