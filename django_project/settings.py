@@ -59,19 +59,24 @@ CSRF_TRUSTED_ORIGINS = [
     "https://ai-reservation-crm-system.onrender.com",
 ]
 
+CORS_ALLOWED_ORIGINS = [
+    "https://ai-reservation-crm-system.onrender.com",
+]
+
+CORS_ALLOW_ALL_ORIGINS = True # Set to True for testing to ensure no blocking
+
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    
 ]
 
 ROOT_URLCONF = 'django_project.urls'
