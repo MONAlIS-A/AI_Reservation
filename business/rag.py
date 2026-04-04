@@ -438,7 +438,7 @@ async def aget_global_rag_answer(query, chat_history=None):
     - If found: You MUST show Name, Price, Image, and Link.
     
     TASK 2: Handoff
-    - Provide the direct chat link: [/receptionist/{{Slug}}/]
+    - Provide the direct chat link as a clear markdown link: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/{{Slug}}/)
     
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
