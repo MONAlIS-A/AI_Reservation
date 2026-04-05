@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from .forms import BusinessForm
 from .models import Business
 from .rag import build_pipeline_and_get_db, aget_rag_answer_with_agent, aget_global_rag_answer
@@ -10,6 +11,40 @@ import json
 # -------------------------------
 # Business Creation
 # -------------------------------
+@csrf_exempt
+def create_chatbot(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            # Process the chatbot creation logic here
+            name = data.get("name")
+            description = data.get("description", "")
+            website_url = data.get("website_url", "")
+
+            # Create the business/chatbot in the database
+            business = Business.objects.create(
+                name=name,
+                description=description,
+                website_url=website_url
+            )
+
+            # Build the RAG pipeline/embeddings
+            try:
+                build_pipeline_and_get_db(business_id=business.id)
+            except Exception as e:
+                print(f"Embedding failed: {e}")
+
+            return JsonResponse({
+                "message": "Chatbot created successfully",
+                "id": business.id,
+                "name": business.name
+            })
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+    
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
 def create_business(request):
     if request.method == 'POST':
         form = BusinessForm(request.POST)

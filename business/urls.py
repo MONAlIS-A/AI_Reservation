@@ -2,7 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("create/", views.create_business, name="create_business"),
+    path("create/", views.create_chatbot, name="create_chatbot"),
     # Dashboard / Global search
     path("", views.global_chat_page, name="global_chat_page"),
     path("api/global-chat/", views.global_chat_api, name="global_chat_api"),
