@@ -3,8 +3,8 @@ from .models import Business, BusinessEmbedding, Appointment
 
 @admin.register(Business)
 class BusinessAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'domain', 'website_url')
-    search_fields = ('name', 'website_url', 'domain')
+    list_display = ('id', 'name', 'website_url')
+    search_fields = ('name', 'website_url')
 
 @admin.register(BusinessEmbedding)
 class BusinessEmbeddingAdmin(admin.ModelAdmin):

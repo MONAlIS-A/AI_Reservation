@@ -11,7 +11,7 @@ class BusinessSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Business
-        fields = ['id', 'name', 'website_url', 'description', 'domain', 'vector_data']
+        fields = ['id', 'name', 'website_url', 'description', 'vector_data']
 
 class AppointmentSerializer(serializers.ModelSerializer):
     business_name = serializers.CharField(source='business.name', read_only=True)

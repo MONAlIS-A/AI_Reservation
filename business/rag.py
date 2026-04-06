@@ -26,7 +26,7 @@ def load_business_documents(business_id=None):
     docs = []
     for biz in businesses:
         if biz.description:
-            text = f"Business Name: {biz.name}\nDescription: {biz.description}\nDomain: {biz.domain}"
+            text = f"Business Name: {biz.name}\nDescription: {biz.description}"
             docs.append(Document(page_content=text, metadata={"business_id": biz.id, "business_name": biz.name}))
     return docs
 

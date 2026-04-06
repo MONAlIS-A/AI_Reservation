@@ -4,14 +4,14 @@ class Business(models.Model):
     name = models.CharField(max_length=255, verbose_name="Business Name", help_text="e.g. Acme Corporation")
     website_url = models.URLField(max_length=200, verbose_name="Website URL", help_text="https://www.yourbusiness.com")
     description = models.TextField(verbose_name="Description", help_text="Describe your primary business focus...")
-    domain = models.CharField(max_length=100, default="Services", choices=[
-        ('Health & Wellness', 'Health & Wellness'),
-        ('Personal Care & Lifestyle', 'Personal Care & Lifestyle'),
-        ('Professional Services', 'Professional Services'),
-        ('Hospitality & Leisure', 'Hospitality & Leisure'),
-        ('Education & Training', 'Education & Training'),
-        ('Services & Maintenance', 'Services & Maintenance'),
-    ])
+    # domain = models.CharField(max_length=100, default="Services", choices=[
+    #     ('Health & Wellness', 'Health & Wellness'),
+    #     ('Personal Care & Lifestyle', 'Personal Care & Lifestyle'),
+    #     ('Professional Services', 'Professional Services'),
+    #     ('Hospitality & Leisure', 'Hospitality & Leisure'),
+    #     ('Education & Training', 'Education & Training'),
+    #     ('Services & Maintenance', 'Services & Maintenance'),
+    # ])
 
     def __str__(self):
         return self.name
