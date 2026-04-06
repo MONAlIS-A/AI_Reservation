@@ -150,7 +150,7 @@ async def run_tool(name, args, business_id=None, website_url=None):
                 businesses = await sync_to_async(lambda: list(Business.objects.all()))()
                 results = []
                 for biz in businesses:
-                    results.append(f"Business ID: {biz.id} | Name: {biz.name} | Slug: {biz.name} | Domain: {biz.domain} | Desc: {str(biz.description)[:100]}...")
+                    results.append(f"Business ID: {biz.id} | Name: {biz.name} | Slug: {biz.name} | Desc: {str(biz.description)[:100]}...")
                 return "\n".join(results)
             
             vector_db = await sync_to_async(build_pipeline_and_get_db)(business_id=None)
