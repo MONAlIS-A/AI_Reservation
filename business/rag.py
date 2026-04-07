@@ -60,27 +60,42 @@ def scrape_business_website(url, query=""):
     try:
         response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         if response.status_code == 200:
-            # Try JSON first
+            # Try JSON first (API URL logic)
             try:
                 data = response.json()
-                if isinstance(data, list) and query:
-                    import re
-                    q_clean = re.sub(r'[^\w\s]', '', query.lower())
-                    stop_words = {'is', 'are', 'available', 'available', 'show', 'name', 'price', 'image', 'link', 'details', 'for', 'the', 'and'}
-                    keywords = [w for w in q_clean.split() if len(w) > 2 and w not in stop_words]
-                    scored_items = []
-                    for item in data:
-                        item_str = json.dumps(item).lower()
-                        score = sum(1 for k in keywords if k in item_str)
-                        if score > 0: scored_items.append((score, item))
-                    if scored_items:
-                        scored_items.sort(key=lambda x: x[0], reverse=True)
-                        return json.dumps([x[1] for x in scored_items[:2]], indent=2)
+                items = []
+                if isinstance(data, list):
+                    items = data
+                elif isinstance(data, dict):
+                    # Look for likely list keys
+                    for key in ['products', 'items', 'data', 'results', 'objects']:
+                        if isinstance(data.get(key), list):
+                            items = data[key]
+                            break
+                    if not items: # Case it's just a single object
+                        items = [data]
+                
+                if items:
+                    products = []
+                    for item in items[:10]: # Limit to 10
+                        if not isinstance(item, dict): continue
+                        name = item.get('name') or item.get('title') or "Unknown Product"
+                        price = item.get('price') or item.get('amount') or item.get('sale_price') or "N/A"
+                        image = item.get('image') or item.get('thumbnail') or item.get('img_url') or item.get('picture') or ""
+                        link = item.get('link') or item.get('url') or item.get('product_url') or url
+                        
+                        prod_str = f"Product: {name}\nPrice: {price}\n"
+                        if image: prod_str += f"Image: ![ {name} ]({image})\n"
+                        prod_str += f"Link: [ View Product ]({link})\n"
+                        products.append(prod_str)
+                    
+                    if products:
+                        return "Found products from API:\n\n" + "\n---\n".join(products)
                 return json.dumps(data, indent=2)[:15000]
             except Exception:
                 pass
             
-            # Case HTML
+            # Case HTML (Website Link logic - though prompt will usually bypass this)
             soup = BeautifulSoup(response.text, 'lxml') or BeautifulSoup(response.text, 'html.parser')
             for tag in ["script", "style"]:
                 for s in soup(tag): s.decompose()
@@ -96,9 +111,9 @@ def scrape_business_website(url, query=""):
                 if not href.startswith('http'): href = f"{url.rstrip('/')}/{href.lstrip('/')}"
                 elements.append(f"Link: [ {title} ]({href})")
             clean_text = soup.get_text(separator=' ')
-            full_context = f"Website Text Content: {clean_text[:4000]}\n\nFound Media/Links:\n" + "\n".join(elements[:30])
+            full_context = f"Website Content: {clean_text[:4000]}\n\nMedia/Links:\n" + "\n".join(elements[:20])
             return full_context[:8000] 
-    except Exception: return "Error scraping the target URL."
+    except Exception as e: return f"Error accessing URL: {str(e)}"
     return "No content retrieved."
 
 # --- Manual Tool Runner ---
@@ -265,59 +280,33 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     ]
     
     system_prompt = f"""
-    INTENT & QUERY ANALYSIS:
-    - Step 1: Detect User Intent. 
-    - **Intent A (Inquiry)**: If user asks about availability or prices (e.g. "Is X available?").
-      - YOU MUST: Search docs/website. 
-      - YOU MUST: Clearly display: **Product Name**, **Price** (if cent, convert to $), **Markdown Image**, and **Clickable Link**.
-      - **CRITICAL**: Do NOT mention booking or data collection yet.
-    - **Intent B (Booking)**: ONLY if user explicitly says they want to book or reserve, transition to DATA COLLECTION. 
-    
-    OPERATIONAL GUIDELINES:
-    - For inquiries: Show the product information cards/text clearly. STOP there.
-    - If a user says "X is available", accept it and move to Intent B.
-    - Price Conversion: `priceCents` 3500 becomes `$35.00`.
-    - No emotional fillers. Strictly professional.
-    
-    SHORT MEMORY & CONTEXT:
-    - Identify details. Convert 'tomorrow' to `YYYY-MM-DD`.
-    
-    FORMATTING: No asterisks. No emojis. Numbers for lists.
+    You are the 'AI Receptionist' for {biz.name}. You are professional, empathetic, and direct. 😊
 
-    SHORT MEMORY & CONTEXT:
-    - Automatically identify or calculate details (Name, Email, Service, Date, Time).
-    - Convert relative dates like 'tomorrow' into `YYYY-MM-DD` using current time.
+    CORE MEMORY & ANALYSIS:
+    - You MUST analyze the entire chat history to understand the current context (User Name, Email, Service, etc.).
+    - If the user provides info in previous messages, do not ask for it again.
 
-    FORMATTING RULES:
-    - No asterisks. No emojis. Plain text only. Use numbers for lists.
+    TASK 1: Handle User Intent
+    - **Intent A (Inquiry)**: If user asks about products, services, or availability.
+      - Search internal documentation or website.
+      - Display results clearly: **Name**, **Price**, **Image**, and **Link**.
+    - **Intent B (Booking)**: If user wants to book, collect: Name, Email, Service, Date, and Time.
+      - Once collected, use 'check_calendar' and 'book_appointment'.
 
-    DATA COLLECTION & PARAMETERS (FOR BOOKING):
-    1. Your full name (Map to `customer_name`)
-    2. Your email address (Map to `customer_email`)
-    3. The service name (Map to `service_name`)
-    4. Date (YYYY-MM-DD format)
-    5. Time (HH:MM format)
-    
-    - **CRITICAL**: Combine Date and Time into ISO string `YYYY-MM-DDTHH:MM:SS` for the 'start_time' parameter.
-    
-    BOOKING EXECUTION (STRICT):
-    1. Check Slot: Call 'check_calendar' for the specified date once you have the 5 parameters.
-    2. Confirm: If the tool result shows the slot is free, call 'book_appointment' IMMEDIATELY.
-    3. Busy: If the tool result shows the slot is occupied, inform the user and suggest next slots.
-    4. NO CONFIRMATION: Do not ask for user permission before executing these tools.
+    TASK 2: Handling URLs (STRICT RULES)
+    - If the user provides an API URL (e.g., contains 'api', 'json', or explicitly stated as API):
+        - YOU MUST use 'search_website' to fetch products/data from that API.
+        - Display the results as a list of products with Name, Price, Image, and Link.
+    - If the user provides a REGULAR website link (e.g., 'https://example.com' with no API indicators):
+        - DO NOT scrape the website.
+        - Simply provide the link back to the user and acknowledge it.
 
-    CONFIRMATION FORMAT (REQUIRED):
-       Booking Confirmed:
-       1. Business: {biz.name}
-       2. Service: [Service Name]
-       3. Name: [User Name]
-       4. Email: [User Email]
-       5. Date & Time: [Date] at [Time]
-    
-    GENERAL RULES:
-    - Use 'search_documentation' for technical business info.
-    - Use 'search_website' for external links if needed.
-    - For status checks, use 'check_booking_status' with the provided email.
+    BOOKING PARAMETERS:
+    1. customer_name
+    2. customer_email
+    3. service_name
+    4. date (YYYY-MM-DD)
+    5. time (HH:MM)
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
@@ -422,24 +411,32 @@ async def aget_global_rag_answer(query, chat_history=None):
     
     system_prompt = f"""
     You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
-    
-    SHORT MEMORY & CONTEXT:
-    - Use conversation history to guide the user.
-    
-    FORMATTING RULES:
-    - No asterisks. Plain text only. Use numbers for lists.
-    
-    GREETING & DISCOVERY:
-    - ALWAYS use 'search_across_businesses' with 'query=list all' if greeting the user.
-    - If a user asks for a specific product, use 'web_search' or 'search_website' if you have the business ID.
-    
-    TASK 1: Global Information Retrieval
-    - If user asks for any service/product info, search documentation and website first, then fallback to 'web_search'.
-    - If found: You MUST show Name, Price, Image, and Link.
-    
-    TASK 2: Handoff
-    - Provide the direct chat link as a clear markdown link: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/{{Slug}}/)
-    
+
+    CORE MEMORY & ANALYSIS:
+    - You MUST analyze the entire chat history provided to understand the current context and user needs.
+    - If the user asks about something discussed earlier, refer back to it correctly.
+
+    TASK 1: Business-Related Questions
+    - If the user asks about a specific business or services we offer, use 'search_across_businesses' or 'search_documentation'.
+    - Help users find the right business for their needs.
+
+    TASK 2: Handling URLs (STRICT RULES)
+    - If the user provides an API URL (e.g., contains 'api', 'json', or explicitly stated as API):
+        - YOU MUST use 'search_website' to fetch products/data from that API.
+        - Display the results as a list of products with Name, Price, Image, and Link.
+    - If the user provides a REGULAR website link (e.g., 'https://example.com' with no API indicators):
+        - DO NOT scrape the website.
+        - DO NOT use any tools.
+        - Simply provide the link back to the user and acknowledge it.
+
+    TASK 3: Handoff
+    - Provide direct chat links to businesses using: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[BusinessName]/)
+    - Replace '[BusinessName]' with the exact name of the business (e.g., 'SpaZen' or 'TechSupport').
+
+    FORMATTING:
+    - No asterisks. Plain text preferred. Use numbers for lists.
+    - Always maintain a helpful, welcoming tone.
+
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
 
