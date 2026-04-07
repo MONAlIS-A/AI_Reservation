@@ -85,31 +85,38 @@ def global_chat_page(request):
 
 from django.db import transaction
 
+from django.db.models import Q
+
 def global_chat_api(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             user_query = data.get('message', '').strip() or "Hello!"
             
-            # 🔥 Hardened Identity Logic
+            # 🔥 Super Hardened Identity Logic
             user_id = data.get('user_id') or data.get('session_id') 
-            if not user_id or user_id == "undefined":
-                if not request.session.session_key:
-                    request.session.save()
-                user_id = request.session.session_key
+            if not request.session.session_key:
+                request.session.save()
+            session_key = request.session.session_key
             
-            # Diagnostic LOG
-            print(f"DEBUG: GLOBAL CHAT | UserID: {user_id}")
+            if not user_id or user_id == "undefined":
+                user_id = session_key
 
-            # 1. SAVE USER MESSAGE FIRST (to be in context)
+            # 1. SAVE USER MESSAGE FIRST
             with transaction.atomic():
-                ChatHistory.objects.create(user_id=user_id, role='user', content=user_query)
+                ChatHistory.objects.create(
+                    user_id=user_id, 
+                    session_key=session_key, 
+                    role='user', 
+                    content=user_query
+                )
 
-            # 2. LOAD HISTORY FOR RAG
+            # 2. LOAD HISTORY FOR RAG (Dual Match for Security)
             db_history = ChatHistory.objects.filter(
-                user_id=user_id,
+                Q(user_id=user_id) | Q(session_key=session_key),
                 business__isnull=True
             ).order_by('created_at')
+            
             history_count = db_history.count()
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
@@ -121,7 +128,12 @@ def global_chat_api(request):
 
             # 4. SAVE ASSISTANT RESPONSE
             with transaction.atomic():
-                ChatHistory.objects.create(user_id=user_id, role='assistant', content=bot_answer)
+                ChatHistory.objects.create(
+                    user_id=user_id, 
+                    session_key=session_key, 
+                    role='assistant', 
+                    content=bot_answer
+                )
 
             return JsonResponse({
                 'answer': bot_answer,
@@ -147,20 +159,28 @@ def chat_api(request, business_id):
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
 
-            # 🔥 Hardened Identity Logic
+            # 🔥 Super Hardened Identity Logic
             user_id = data.get('user_id') or data.get('session_id')
+            if not request.session.session_key:
+                request.session.save()
+            session_key = request.session.session_key
+            
             if not user_id or user_id == "undefined":
-                if not request.session.session_key:
-                    request.session.save()
-                user_id = request.session.session_key
+                user_id = session_key
 
             # 1. SAVE USER MESSAGE FIRST
             with transaction.atomic():
-                ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='user', content=user_query)
+                ChatHistory.objects.create(
+                    user_id=user_id, 
+                    session_key=session_key, 
+                    business_id=business_id, 
+                    role='user', 
+                    content=user_query
+                )
 
-            # 2. LOAD history from Database
+            # 2. LOAD history from Database (Dual Match)
             db_history = ChatHistory.objects.filter(
-                user_id=user_id,
+                Q(user_id=user_id) | Q(session_key=session_key),
                 business_id=business_id
             ).order_by('created_at')
             history_count = db_history.count()
@@ -175,7 +195,13 @@ def chat_api(request, business_id):
 
             # 4. SAVE ASSISTANT RESPONSE
             with transaction.atomic():
-                ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='assistant', content=bot_answer)
+                ChatHistory.objects.create(
+                    user_id=user_id, 
+                    session_key=session_key, 
+                    business_id=business_id, 
+                    role='assistant', 
+                    content=bot_answer
+                )
 
             return JsonResponse({
                 'answer': bot_answer,
