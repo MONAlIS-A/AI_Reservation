@@ -314,15 +314,17 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     # 🔥 Automated Summarization & Windowing (The Production Solution)
     summary = await asummarize_chat_history(chat_history)
     
+    summary_text = f"\nLONG-TERM MEMORY (SUMMARY of past events):\n{summary}\n" if summary else ""
+    
     system_prompt = f"""
     You are the 'AI Receptionist' for {biz.name}. You are professional, empathetic, and direct. 😊
-
-    LONG-TERM MEMORY (SUMMARY OF PAST EVENTS):
-    {summary if summary else "No previous history found."}
-
+    {summary_text}
     CORE MEMORY & IDENTITY (STRICT):
-    - Analyze the 'LONG-TERM MEMORY' above. If you know the user's name or any facts, DO NOT ask for them again.
-    - If the user asks a follow-up, use the memory to give a context-aware answer.
+    - ALWAYS analyze the 'LONG-TERM MEMORY' (if present) and the 'RECENT MESSAGES' below before answering.
+    - If the user has EVER mentioned their name, email, or a business preference, YOU MUST REMEMBER IT.
+    - If a user asks "Who am I?" or "Do you know me?", scan all provided context and answer based on facts.
+    - Never say "I don't have access to personal information" if the information exists in history.
+    - Do not ask for Name or Email if it was already provided.
 
     TASK 1: Corrective RAG (CRAG) Strategy
     - Step 1: Search docs or website.
@@ -436,15 +438,14 @@ async def aget_global_rag_answer(query, chat_history=None):
     
     # 🔥 Automated Summarization & Windowing
     summary = await asummarize_chat_history(chat_history)
+    summary_text = f"\nLONG-TERM MEMORY (SUMMARY of past events):\n{summary}\n" if summary else ""
 
     system_prompt = f"""
     You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
-
-    LONG-TERM MEMORY (SUMMARY of past events):
-    {summary if summary else "No previous history found."}
-
+    {summary_text}
     CORE MEMORY & DEEP ANALYSIS (STRICT):
-    - Analyze the 'LONG-TERM MEMORY' above. If the user previously mentioned a business, location, or their name, REMEMBER IT.
+    - ALWAYS analyze the 'LONG-TERM MEMORY' (if present) and the 'RECENT MESSAGES' below before answering.
+    - If the user previously mentioned a business, location, or their name, REMEMBER IT.
     - If a user asks "Who am I?", use the summary or history to answer.
 
     TASK 1: Corrective Discovery (CRAG)
@@ -458,6 +459,9 @@ async def aget_global_rag_answer(query, chat_history=None):
 
     messages = [SystemMessage(content=system_prompt)]
     
+    # Label the messages for context clarity
+    messages.append(SystemMessage(content="\n--- RECENT MESSAGES ---\n"))
+    
     # 🔥 Windowing: Send LAST 4 messages back to AI
     recent_history = chat_history[-6:] if chat_history else []
     
@@ -468,7 +472,7 @@ async def aget_global_rag_answer(query, chat_history=None):
             elif msg.get('role') == 'assistant':
                 messages.append(AIMessage(content=msg['content']))
 
-    # Append current query if not redundant
+    # Append current query
     if not recent_history or recent_history[-1]['content'] != query:
         messages.append(HumanMessage(content=query))
     
