@@ -201,6 +201,31 @@ async def run_tool(name, args, business_id=None, website_url=None):
     
     return "Unknown tool."
 
+async def asummarize_chat_history(chat_history):
+    """
+    Summarizes long chat history into a few critical sentences to save tokens and maintain context.
+    """
+    if not chat_history or len(chat_history) < 6:
+        return ""
+    
+    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
+    history_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history])
+    
+    summary_prompt = f"""
+    The following is a chat history. Summarize the core facts about the user (NAME, EMAIL, INTERESTS, PREVIOUS TOPICS) 
+    in 3-4 professional sentences. This will be used as long-term memory.
+    
+    Chat: 
+    {history_text}
+    
+    Summary: 
+    """
+    try:
+        res = await llm.ainvoke([SystemMessage(content=summary_prompt)])
+        return res.content
+    except Exception:
+        return ""
+
 async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     try:
         # Better lookup for production (handling potential type mismatches)
@@ -286,19 +311,22 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
         }
     ]
     
+    # 🔥 Automated Summarization & Windowing (The Production Solution)
+    summary = await asummarize_chat_history(chat_history)
+    
     system_prompt = f"""
     You are the 'AI Receptionist' for {biz.name}. You are professional, empathetic, and direct. 😊
 
+    LONG-TERM MEMORY (SUMMARY OF PAST EVENTS):
+    {summary if summary else "No previous history found."}
+
     CORE MEMORY & IDENTITY (STRICT):
-    - You MUST analyze the chat history (provided below) before answering.
-    - If the user has EVER mentioned their name, email, or a specific problem, YOU MUST REMEMBER IT.
-    - If a user asks "Who am I?" or "Do you know me?", scan the history and answer based on provided facts.
-    - Avoid phrases like "I don't have access to personal information" if the info exists in history.
-    - Do not ask for Name or Email if it was already provided.
+    - Analyze the 'LONG-TERM MEMORY' above. If you know the user's name or any facts, DO NOT ask for them again.
+    - If the user asks a follow-up, use the memory to give a context-aware answer.
 
     TASK 1: Corrective RAG (CRAG) Strategy
     - Step 1: Search docs or website.
-    - Step 2: Validate. If local data is weak or missing, YOU MUST use 'web_search' for real-time accuracy.
+    - Step 2: Validate. If local data is weak/missing, YOU must use 'web_search'.
     - Display results as a list with Name, Price, Image, and Link.
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -306,15 +334,19 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     
     messages = [SystemMessage(content=system_prompt)]
     
-    # Build history
-    if chat_history:
-        for msg in chat_history:
+    # 🔥 Windowing: Send ONLY LAST 4 messages back to AI to save tokens
+    recent_history = chat_history[-6:] if chat_history else []
+    
+    if recent_history:
+        for msg in recent_history:
             if msg.get('role') == 'user':
                 messages.append(HumanMessage(content=msg['content']))
             elif msg.get('role') == 'assistant':
                 messages.append(AIMessage(content=msg['content']))
                 
-    messages.append(HumanMessage(content=query))
+    # Do not append the query if it's already the last message in history (saved in view)
+    if not recent_history or recent_history[-1]['content'] != query:
+        messages.append(HumanMessage(content=query))
     
     chat_with_tools = llm.bind_tools(tools)
     
@@ -402,34 +434,43 @@ async def aget_global_rag_answer(query, chat_history=None):
         }
     ]
     
+    # 🔥 Automated Summarization & Windowing
+    summary = await asummarize_chat_history(chat_history)
+
     system_prompt = f"""
     You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
 
+    LONG-TERM MEMORY (SUMMARY of past events):
+    {summary if summary else "No previous history found."}
+
     CORE MEMORY & DEEP ANALYSIS (STRICT):
-    - ALWAYS analyze the chat history provided. If the user previously mentioned a business, location, or their name, REMEMBER IT.
-    - If a user asks "Who am I?" or asks for their details, use the search history to identify them.
-    - Never say "I don't have access to personal information" if the information was shared earlier in the current session.
+    - Analyze the 'LONG-TERM MEMORY' above. If the user previously mentioned a business, location, or their name, REMEMBER IT.
+    - If a user asks "Who am I?", use the summary or history to answer.
 
     TASK 1: Corrective Discovery (CRAG)
     - Find businesses that fit the user's criteria.
-    - If needed, supplement with 'web_search' for real-time prices or data.
 
     TASK 2: Handoff
-    - Provide direct links: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
+    - Provide links: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
 
     messages = [SystemMessage(content=system_prompt)]
     
-    if chat_history:
-        for msg in chat_history:
+    # 🔥 Windowing: Send LAST 4 messages back to AI
+    recent_history = chat_history[-6:] if chat_history else []
+    
+    if recent_history:
+        for msg in recent_history:
             if msg.get('role') == 'user':
                 messages.append(HumanMessage(content=msg['content']))
             elif msg.get('role') == 'assistant':
                 messages.append(AIMessage(content=msg['content']))
 
-    messages.append(HumanMessage(content=query))
+    # Append current query if not redundant
+    if not recent_history or recent_history[-1]['content'] != query:
+        messages.append(HumanMessage(content=query))
     
     chat_with_tools = llm.bind_tools(tools)
     
