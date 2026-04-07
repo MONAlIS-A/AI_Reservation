@@ -83,9 +83,8 @@ def global_chat_page(request):
     return render(request, 'business/global_chat.html')
 
 
-# -------------------------------
-# GLOBAL CHAT API (SYNC FIXED)
-# -------------------------------
+from django.db import transaction
+
 def global_chat_api(request):
     if request.method == 'POST':
         try:
@@ -99,7 +98,14 @@ def global_chat_api(request):
                     request.session.save()
                 user_id = request.session.session_key
             
-            # Load history
+            # Diagnostic LOG
+            print(f"DEBUG: GLOBAL CHAT | UserID: {user_id}")
+
+            # 1. SAVE USER MESSAGE FIRST (to be in context)
+            with transaction.atomic():
+                ChatHistory.objects.create(user_id=user_id, role='user', content=user_query)
+
+            # 2. LOAD HISTORY FOR RAG
             db_history = ChatHistory.objects.filter(
                 user_id=user_id,
                 business__isnull=True
@@ -107,15 +113,15 @@ def global_chat_api(request):
             history_count = db_history.count()
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
-            # ✅ Run RAG
+            # 3. RUN AI RAG
             bot_answer = async_to_sync(aget_global_rag_answer)(
                 user_query,
                 chat_history=history
             )
 
-            # SAVE IMMEDIATELY
-            ChatHistory.objects.create(user_id=user_id, role='user', content=user_query)
-            ChatHistory.objects.create(user_id=user_id, role='assistant', content=bot_answer)
+            # 4. SAVE ASSISTANT RESPONSE
+            with transaction.atomic():
+                ChatHistory.objects.create(user_id=user_id, role='assistant', content=bot_answer)
 
             return JsonResponse({
                 'answer': bot_answer,
@@ -148,7 +154,11 @@ def chat_api(request, business_id):
                     request.session.save()
                 user_id = request.session.session_key
 
-            # Load history from Database
+            # 1. SAVE USER MESSAGE FIRST
+            with transaction.atomic():
+                ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='user', content=user_query)
+
+            # 2. LOAD history from Database
             db_history = ChatHistory.objects.filter(
                 user_id=user_id,
                 business_id=business_id
@@ -156,16 +166,16 @@ def chat_api(request, business_id):
             history_count = db_history.count()
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
-            # ✅ Run async RAG agent safely
+            # 3. RUN AI RAG
             bot_answer = async_to_sync(aget_rag_answer_with_agent)(
                 business_id,
                 user_query,
                 chat_history=history
             )
 
-            # SAVE IMMEDIATELY
-            ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='user', content=user_query)
-            ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='assistant', content=bot_answer)
+            # 4. SAVE ASSISTANT RESPONSE
+            with transaction.atomic():
+                ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='assistant', content=bot_answer)
 
             return JsonResponse({
                 'answer': bot_answer,
