@@ -87,16 +87,21 @@ def global_chat_page(request):
 # GLOBAL CHAT API (SYNC FIXED)
 # -------------------------------
 def global_chat_api(request):
-
-    if 'global_chat_history' not in request.session:
-        request.session['global_chat_history'] = []
+    if not request.session.session_key:
+        request.session.save()
+    request.session.modified = True
 
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             user_query = data.get('message', '').strip() or "Hello!"
 
-            history = request.session.get('global_chat_history', [])
+            # Load history from Database
+            db_history = ChatHistory.objects.filter(
+                session_key=request.session.session_key,
+                business__isnull=True
+            ).order_by('created_at')
+            history = [{'role': h.role, 'content': h.content} for h in db_history]
 
             # ✅ Run async function safely in sync view
             bot_answer = async_to_sync(aget_global_rag_answer)(
@@ -107,12 +112,6 @@ def global_chat_api(request):
             # Persist to Database
             ChatHistory.objects.create(session_key=request.session.session_key, role='user', content=user_query)
             ChatHistory.objects.create(session_key=request.session.session_key, role='assistant', content=bot_answer)
-
-            # Keep Session history for immediate small context if needed
-            history.append({'role': 'user', 'content': user_query})
-            history.append({'role': 'assistant', 'content': bot_answer})
-            request.session['global_chat_history'] = history[-10:]
-            request.session.modified = True
 
             return JsonResponse({'answer': bot_answer})
 
@@ -126,6 +125,9 @@ def global_chat_api(request):
 # BUSINESS CHAT API (SYNC FIXED)
 # -------------------------------
 def chat_api(request, business_id):
+    if not request.session.session_key:
+        request.session.save()
+    request.session.modified = True
 
     if request.method == 'POST':
         try:
@@ -135,12 +137,12 @@ def chat_api(request, business_id):
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
 
-            session_key = f'chat_history_{business_id}'
-
-            if session_key not in request.session:
-                request.session[session_key] = []
-
-            history = request.session[session_key]
+            # Load history from Database
+            db_history = ChatHistory.objects.filter(
+                session_key=request.session.session_key,
+                business_id=business_id
+            ).order_by('created_at')
+            history = [{'role': h.role, 'content': h.content} for h in db_history]
 
             # ✅ Run async RAG agent safely
             bot_answer = async_to_sync(aget_rag_answer_with_agent)(
@@ -162,12 +164,6 @@ def chat_api(request, business_id):
                 role='assistant', 
                 content=bot_answer
             )
-
-            # Update session history
-            history.append({'role': 'user', 'content': user_query})
-            history.append({'role': 'assistant', 'content': bot_answer})
-            request.session[session_key] = history[-10:]
-            request.session.modified = True
 
             return JsonResponse({
                 'answer': bot_answer,
