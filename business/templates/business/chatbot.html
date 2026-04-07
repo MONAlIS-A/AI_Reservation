@@ -190,6 +190,17 @@
     const sendBtn = document.getElementById('send-btn');
     const businessId = "{{ business.id }}";
 
+    // ✅ Persistent User Identifier
+    const getUserId = () => {
+        let uid = localStorage.getItem('ai_chat_user_id');
+        if (!uid) {
+            uid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+            localStorage.setItem('ai_chat_user_id', uid);
+        }
+        return uid;
+    };
+    const userId = getUserId();
+
     function addMessage(text, isUser, products = []) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
@@ -247,7 +258,10 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                 },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ 
+                    message: text,
+                    user_id: userId
+                })
             });
 
             const data = await response.json();

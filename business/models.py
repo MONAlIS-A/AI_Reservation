@@ -38,7 +38,8 @@ class Appointment(models.Model):
         return f"Booking at {self.business.name} for {self.customer_name} on {self.start_time}"
 
 class ChatHistory(models.Model):
-    session_key = models.CharField(max_length=255, db_index=True)
+    user_id = models.CharField(max_length=255, db_index=True, null=True, blank=True)
+    session_key = models.CharField(max_length=255, db_index=True, null=True, blank=True)
     business = models.ForeignKey(Business, on_delete=models.CASCADE, null=True, blank=True, related_name='chat_logs')
     role = models.CharField(max_length=50) # user, assistant
     content = models.TextField()

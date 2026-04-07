@@ -117,6 +117,17 @@
     const sendBtn = document.getElementById('send-btn');
     const typing = document.getElementById('typing');
 
+    // ✅ Persistent User Identifier for Product Level
+    const getUserId = () => {
+        let uid = localStorage.getItem('ai_chat_user_id');
+        if (!uid) {
+            uid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+            localStorage.setItem('ai_chat_user_id', uid);
+        }
+        return uid;
+    };
+    const userId = getUserId();
+
     function append(text, isUser) {
         const div = document.createElement('div');
         div.className = `msg ${isUser ? 'user' : 'bot'}`;
@@ -151,7 +162,10 @@
                     'Content-Type': 'application/json', 
                     'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value 
                 },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ 
+                    message: text,
+                    user_id: userId
+                })
             });
             const data = await resp.json();
             typing.style.display = 'none';
