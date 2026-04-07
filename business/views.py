@@ -92,46 +92,36 @@ def global_chat_api(request):
             data = json.loads(request.body)
             user_query = data.get('message', '').strip() or "Hello!"
             
-            # 🔥 Prioritize manual USER ID for product-level persistence
+            # 🔥 Hardened Identity Logic
             user_id = data.get('user_id') or data.get('session_id') 
-            if not user_id:
+            if not user_id or user_id == "undefined":
                 if not request.session.session_key:
                     request.session.save()
                 user_id = request.session.session_key
             
-            # Diagnostic LOG
-            print(f"DEBUG: GLOBAL CHAT | UserID: {user_id} | SessionID: {request.session.session_key}")
-
-            # Load history using the robust USER ID
+            # Load history
             db_history = ChatHistory.objects.filter(
                 user_id=user_id,
                 business__isnull=True
             ).order_by('created_at')
-            
-            print(f"DEBUG: History found: {db_history.count()} messages")
+            history_count = db_history.count()
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
-            # ✅ Run async function safely
+            # ✅ Run RAG
             bot_answer = async_to_sync(aget_global_rag_answer)(
                 user_query,
                 chat_history=history
             )
 
-            # Persist to Database with the consistent USER ID
-            ChatHistory.objects.create(
-                user_id=user_id, 
-                session_key=request.session.session_key, 
-                role='user', 
-                content=user_query
-            )
-            ChatHistory.objects.create(
-                user_id=user_id, 
-                session_key=request.session.session_key, 
-                role='assistant', 
-                content=bot_answer
-            )
+            # SAVE IMMEDIATELY
+            ChatHistory.objects.create(user_id=user_id, role='user', content=user_query)
+            ChatHistory.objects.create(user_id=user_id, role='assistant', content=bot_answer)
 
-            return JsonResponse({'answer': bot_answer})
+            return JsonResponse({
+                'answer': bot_answer,
+                'debug_user_id': user_id,
+                'debug_history_items': history_count
+            })
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
@@ -151,23 +141,19 @@ def chat_api(request, business_id):
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
 
-            # 🔥 Prioritize manual USER ID
+            # 🔥 Hardened Identity Logic
             user_id = data.get('user_id') or data.get('session_id')
-            if not user_id:
+            if not user_id or user_id == "undefined":
                 if not request.session.session_key:
                     request.session.save()
                 user_id = request.session.session_key
-
-            # Diagnostic LOG
-            print(f"DEBUG: BIZ CHAT (ID:{business_id}) | UserID: {user_id} | SessionID: {request.session.session_key}")
 
             # Load history from Database
             db_history = ChatHistory.objects.filter(
                 user_id=user_id,
                 business_id=business_id
             ).order_by('created_at')
-            
-            print(f"DEBUG: History found for Biz: {db_history.count()} messages")
+            history_count = db_history.count()
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
             # ✅ Run async RAG agent safely
@@ -177,25 +163,15 @@ def chat_api(request, business_id):
                 chat_history=history
             )
 
-            # Persist to Database with consistent USER ID
-            ChatHistory.objects.create(
-                user_id=user_id,
-                session_key=request.session.session_key, 
-                business_id=business_id, 
-                role='user', 
-                content=user_query
-            )
-            ChatHistory.objects.create(
-                user_id=user_id,
-                session_key=request.session.session_key, 
-                business_id=business_id, 
-                role='assistant', 
-                content=bot_answer
-            )
+            # SAVE IMMEDIATELY
+            ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='user', content=user_query)
+            ChatHistory.objects.create(user_id=user_id, business_id=business_id, role='assistant', content=bot_answer)
 
             return JsonResponse({
                 'answer': bot_answer,
-                'products': []
+                'products': [],
+                'debug_user_id': user_id,
+                'debug_history_items': history_count
             })
 
         except Exception as e:
