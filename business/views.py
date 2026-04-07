@@ -87,32 +87,34 @@ def global_chat_page(request):
 # GLOBAL CHAT API (SYNC FIXED)
 # -------------------------------
 def global_chat_api(request):
-    if not request.session.session_key:
-        request.session.create()
-    session_id = request.session.session_key
-    request.session.modified = True
-
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             user_query = data.get('message', '').strip() or "Hello!"
-
-            # Load history from Database
+            
+            # 🔥 Prioritize manual session_id from frontend payload
+            manual_session_id = data.get('session_id')
+            if not manual_session_id:
+                if not request.session.session_key:
+                    request.session.save()
+                manual_session_id = request.session.session_key
+            
+            # Load history using the prioritized ID
             db_history = ChatHistory.objects.filter(
-                session_key=session_id,
+                session_key=manual_session_id,
                 business__isnull=True
             ).order_by('created_at')
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
-            # ✅ Run async function safely in sync view
+            # ✅ Run async functionsafely
             bot_answer = async_to_sync(aget_global_rag_answer)(
                 user_query,
                 chat_history=history
             )
 
-            # Persist to Database
-            ChatHistory.objects.create(session_key=session_id, role='user', content=user_query)
-            ChatHistory.objects.create(session_key=session_id, role='assistant', content=bot_answer)
+            # Persist to Database with the consistent ID
+            ChatHistory.objects.create(session_key=manual_session_id, role='user', content=user_query)
+            ChatHistory.objects.create(session_key=manual_session_id, role='assistant', content=bot_answer)
 
             return JsonResponse({'answer': bot_answer})
 
@@ -126,11 +128,6 @@ def global_chat_api(request):
 # BUSINESS CHAT API (SYNC FIXED)
 # -------------------------------
 def chat_api(request, business_id):
-    if not request.session.session_key:
-        request.session.create()
-    session_id = request.session.session_key
-    request.session.modified = True
-
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
@@ -139,9 +136,16 @@ def chat_api(request, business_id):
             if not user_query:
                 return JsonResponse({'error': 'No message provided'}, status=400)
 
+            # 🔥 Prioritize manual session_id from frontend payload
+            manual_session_id = data.get('session_id')
+            if not manual_session_id:
+                if not request.session.session_key:
+                    request.session.save()
+                manual_session_id = request.session.session_key
+
             # Load history from Database
             db_history = ChatHistory.objects.filter(
-                session_key=session_id,
+                session_key=manual_session_id,
                 business_id=business_id
             ).order_by('created_at')
             history = [{'role': h.role, 'content': h.content} for h in db_history]
@@ -153,15 +157,15 @@ def chat_api(request, business_id):
                 chat_history=history
             )
 
-            # Persist to Database
+            # Persist to Database with consistent ID
             ChatHistory.objects.create(
-                session_key=session_id, 
+                session_key=manual_session_id, 
                 business_id=business_id, 
                 role='user', 
                 content=user_query
             )
             ChatHistory.objects.create(
-                session_key=session_id, 
+                session_key=manual_session_id, 
                 business_id=business_id, 
                 role='assistant', 
                 content=bot_answer
