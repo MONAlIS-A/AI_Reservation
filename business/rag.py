@@ -316,14 +316,6 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     
     messages = [SystemMessage(content=system_prompt)]
     
-    # Load Long History from Database (Last 20 messages)
-    try:
-        from asgiref.sync import sync_to_async
-        # Note: If you want to use the current session key, you need to pass it from the view
-        # or use sync_to_async to fetch it. Since view passes 'chat_history', I'll use it.
-        # But user wants database storage, so I'll prioritize that in the prompt's context.
-    except ImportError: pass
-
     # Build history
     if chat_history:
         for msg in chat_history:
