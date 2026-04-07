@@ -114,8 +114,14 @@ class GlobalChatAPIView(APIView):
         if not user_query:
             user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
         
+        # ✅ Extract Client-Side History
+        history = request.data.get('chat_history', [])
+
         try:
-            bot_answer = async_to_sync(aget_global_rag_answer)(user_query)
+            bot_answer = async_to_sync(aget_global_rag_answer)(
+                user_query, 
+                chat_history=history
+            )
             return Response({'answer': bot_answer})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -167,8 +173,13 @@ class ChatAPIView(APIView):
             return Response({'error': 'No message provided'}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
-            history = request.data.get('history', [])
-            bot_answer = async_to_sync(aget_rag_answer_with_agent)(business_id, user_query, chat_history=history)
+            # ✅ Handle both 'history' and 'chat_history' for compatibility
+            history = request.data.get('chat_history') or request.data.get('history', [])
+            bot_answer = async_to_sync(aget_rag_answer_with_agent)(
+                business_id, 
+                user_query, 
+                chat_history=history
+            )
             return Response({'answer': bot_answer, 'products': []})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

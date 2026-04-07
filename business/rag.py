@@ -370,7 +370,7 @@ async def aget_global_rag_answer(query, chat_history=None):
     """
     Agent that works across ALL businesses.
     """
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.5)
+    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
     
     tools = [
         {
@@ -444,26 +444,20 @@ async def aget_global_rag_answer(query, chat_history=None):
     You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
     {summary_text}
     CORE MEMORY & DEEP ANALYSIS (STRICT):
-    - ALWAYS analyze the 'LONG-TERM MEMORY' (if present) and the 'RECENT MESSAGES' below before answering.
-    - If the user previously mentioned a business, location, or their name, REMEMBER IT.
-    - If a user asks "Who am I?", use the summary or history to answer.
+    - ALWAYS analyze the conversation history provided in the RECENT MESSAGES section below.
+    - If the user previously mentioned their name, business preference, or any fact, YOU MUST REMEMBER IT.
+    - If asked "Who am I?", answer based on the facts found in history.
 
-    TASK 1: Corrective Discovery (CRAG)
-    - Find businesses that fit the user's criteria.
-
-    TASK 2: Handoff
-    - Provide links: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
+    TASK: Help the user find businesses and provide handoff links.
+    - Direct links: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
 
     messages = [SystemMessage(content=system_prompt)]
     
-    # Label the messages for context clarity
-    messages.append(SystemMessage(content="\n--- RECENT MESSAGES ---\n"))
-    
-    # 🔥 Windowing: Send LAST 4 messages back to AI
-    recent_history = chat_history[-6:] if chat_history else []
+    # 🔥 Windowing: More generous 10 message history
+    recent_history = chat_history[-12:] if chat_history else []
     
     if recent_history:
         for msg in recent_history:

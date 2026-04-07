@@ -96,9 +96,6 @@ def global_chat_api(request):
             # ✅ Client-side History Source
             history = data.get('chat_history', [])
 
-            # Diagnostic LOG
-            print(f"DEBUG: GLOBAL CHAT | History Items: {len(history)}")
-
             # ✅ RUN AI RAG (Stateless)
             bot_answer = async_to_sync(aget_global_rag_answer)(
                 user_query,
