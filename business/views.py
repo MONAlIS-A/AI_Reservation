@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .forms import BusinessForm
-from .models import Business
+from .models import Business, ChatHistory
 from .rag import build_pipeline_and_get_db, aget_rag_answer_with_agent, aget_global_rag_answer
 from asgiref.sync import async_to_sync
 import json
@@ -104,10 +104,13 @@ def global_chat_api(request):
                 chat_history=history
             )
 
-            # Save history
+            # Persist to Database
+            ChatHistory.objects.create(session_key=request.session.session_key, role='user', content=user_query)
+            ChatHistory.objects.create(session_key=request.session.session_key, role='assistant', content=bot_answer)
+
+            # Keep Session history for immediate small context if needed
             history.append({'role': 'user', 'content': user_query})
             history.append({'role': 'assistant', 'content': bot_answer})
-
             request.session['global_chat_history'] = history[-10:]
             request.session.modified = True
 
@@ -146,10 +149,23 @@ def chat_api(request, business_id):
                 chat_history=history
             )
 
-            # Update history
+            # Persist to Database
+            ChatHistory.objects.create(
+                session_key=request.session.session_key, 
+                business_id=business_id, 
+                role='user', 
+                content=user_query
+            )
+            ChatHistory.objects.create(
+                session_key=request.session.session_key, 
+                business_id=business_id, 
+                role='assistant', 
+                content=bot_answer
+            )
+
+            # Update session history
             history.append({'role': 'user', 'content': user_query})
             history.append({'role': 'assistant', 'content': bot_answer})
-
             request.session[session_key] = history[-10:]
             request.session.modified = True
 

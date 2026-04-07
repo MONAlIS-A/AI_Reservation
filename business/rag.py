@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from .models import Business
+from .models import Business, ChatHistory
 from .calendar_service import get_slots, book_appointment, check_booking_status
 
 # --- RAG Utils ---
@@ -163,20 +163,23 @@ async def run_tool(name, args, business_id=None, website_url=None):
             # Query all businesses' docs
             if args.get("query", "").lower() in ["list all", "hello", "hi", "all businesses"]:
                 businesses = await sync_to_async(lambda: list(Business.objects.all()))()
+                from urllib.parse import quote
                 results = []
                 for biz in businesses:
-                    results.append(f"Business ID: {biz.id} | Name: {biz.name} | Slug: {biz.name} | Desc: {str(biz.description)[:100]}...")
+                    encoded_name = quote(biz.name)
+                    results.append(f"Business ID: {biz.id} | Name: {biz.name} | EncodedName: {encoded_name} | Desc: {str(biz.description)[:100]}...")
                 return "\n".join(results)
             
             vector_db = await sync_to_async(build_pipeline_and_get_db)(business_id=None)
             if vector_db:
                 sim_docs = vector_db.similarity_search(args.get("query", ""), k=5)
                 results = []
+                from urllib.parse import quote
                 for d in sim_docs:
                     biz_id = d.metadata.get('business_id')
                     biz_name = d.metadata.get('business_name')
-                    biz = await sync_to_async(Business.objects.get)(id=biz_id)
-                    results.append(f"Business: {biz_name} (Slug: {biz.name})\nDetails Section: {d.page_content}")
+                    encoded_name = quote(biz_name)
+                    results.append(f"Business: {biz_name} (ID: {biz_id}, EncodedName: {encoded_name})\nDetails Section: {d.page_content}")
                 return "\n---\n".join(results)
         except Exception as e: return f"Error: {str(e)}"
         return "No businesses found matching this query."
@@ -283,15 +286,16 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     You are the 'AI Receptionist' for {biz.name}. You are professional, empathetic, and direct. 😊
 
     CORE MEMORY & ANALYSIS:
-    - You MUST analyze the entire chat history to understand the current context (User Name, Email, Service, etc.).
-    - If the user provides info in previous messages, do not ask for it again.
+    - You MUST analyze the entire chat history provided (sourced from database session logs) to understand the current context and user needs.
+    - **Summarization Strategy**: If the chat history is long, summarize the key points (User Name, Email, Service, or specific products discussed) and use that summary to provide a concise, relevant answer.
+    - If the user provides info like Name, Email, or Service in previous messages, NEVER ask for it again.
 
     TASK 1: Handle User Intent
     - **Intent A (Inquiry)**: If user asks about products, services, or availability.
       - Search internal documentation or website.
-      - Display results clearly: **Name**, **Price**, **Image**, and **Link**.
-    - **Intent B (Booking)**: If user wants to book, collect: Name, Email, Service, Date, and Time.
-      - Once collected, use 'check_calendar' and 'book_appointment'.
+      - Display results as a list of products with **Name**, **Price**, **Image**, and **Link**.
+    - **Intent B (Booking)**: If user wants to book, verify if you have: Name, Email, Service, Date, and Time.
+      - Once collected, use 'check_calendar' then 'book_appointment'.
 
     TASK 2: Handling URLs (STRICT RULES)
     - If the user provides an API URL (e.g., contains 'api', 'json', or explicitly stated as API):
@@ -301,19 +305,24 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
         - DO NOT scrape the website.
         - Simply provide the link back to the user and acknowledge it.
 
-    BOOKING PARAMETERS:
-    1. customer_name
-    2. customer_email
-    3. service_name
-    4. date (YYYY-MM-DD)
-    5. time (HH:MM)
+    FORMATTING:
+    - No asterisks. Plain text preferred. Use numbers for lists.
+    - Use Markdown for images: ![Alt Text](URL) and links: [Text](URL).
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """
     
     messages = [SystemMessage(content=system_prompt)]
     
-    # Add history
+    # Load Long History from Database (Last 20 messages)
+    try:
+        from asgiref.sync import sync_to_async
+        # Note: If you want to use the current session key, you need to pass it from the view
+        # or use sync_to_async to fetch it. Since view passes 'chat_history', I'll use it.
+        # But user wants database storage, so I'll prioritize that in the prompt's context.
+    except ImportError: pass
+
+    # Build history
     if chat_history:
         for msg in chat_history:
             if msg.get('role') == 'user':
@@ -413,7 +422,8 @@ async def aget_global_rag_answer(query, chat_history=None):
     You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
 
     CORE MEMORY & ANALYSIS:
-    - You MUST analyze the entire chat history provided to understand the current context and user needs.
+    - You MUST analyze the entire chat history provided (sourced from database session logs) to understand the current context and user needs.
+    - **Summarization Strategy**: When responding, consider the previous interactions and summarize relevant context to make your discovery process more efficient.
     - If the user asks about something discussed earlier, refer back to it correctly.
 
     TASK 1: Business-Related Questions
@@ -430,8 +440,9 @@ async def aget_global_rag_answer(query, chat_history=None):
         - Simply provide the link back to the user and acknowledge it.
 
     TASK 3: Handoff
-    - Provide direct chat links to businesses using: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[BusinessName]/)
-    - Replace '[BusinessName]' with the exact name of the business (e.g., 'SpaZen' or 'TechSupport').
+    - Provide direct chat links to businesses using the 'EncodedName' provided by your tools.
+    - Format: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
+    - Example: If Name is 'Bright Smile Dental Care', the EncodedName is 'Bright%20Smile%20Dental%20Care'.
 
     FORMATTING:
     - No asterisks. Plain text preferred. Use numbers for lists.

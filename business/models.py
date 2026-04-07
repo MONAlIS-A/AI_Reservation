@@ -36,3 +36,14 @@ class Appointment(models.Model):
 
     def __str__(self):
         return f"Booking at {self.business.name} for {self.customer_name} on {self.start_time}"
+
+class ChatHistory(models.Model):
+    session_key = models.CharField(max_length=255, db_index=True)
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, null=True, blank=True, related_name='chat_logs')
+    role = models.CharField(max_length=50) # user, assistant
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        biz_name = self.business.name if self.business else "Global Chat"
+        return f"{biz_name} | {self.role} | {self.created_at}"
