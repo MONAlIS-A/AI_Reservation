@@ -99,11 +99,16 @@ def global_chat_api(request):
                     request.session.save()
                 user_id = request.session.session_key
             
+            # Diagnostic LOG
+            print(f"DEBUG: GLOBAL CHAT | UserID: {user_id} | SessionID: {request.session.session_key}")
+
             # Load history using the robust USER ID
             db_history = ChatHistory.objects.filter(
                 user_id=user_id,
                 business__isnull=True
             ).order_by('created_at')
+            
+            print(f"DEBUG: History found: {db_history.count()} messages")
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
             # ✅ Run async function safely
@@ -153,11 +158,16 @@ def chat_api(request, business_id):
                     request.session.save()
                 user_id = request.session.session_key
 
+            # Diagnostic LOG
+            print(f"DEBUG: BIZ CHAT (ID:{business_id}) | UserID: {user_id} | SessionID: {request.session.session_key}")
+
             # Load history from Database
             db_history = ChatHistory.objects.filter(
                 user_id=user_id,
                 business_id=business_id
             ).order_by('created_at')
+            
+            print(f"DEBUG: History found for Biz: {db_history.count()} messages")
             history = [{'role': h.role, 'content': h.content} for h in db_history]
 
             # ✅ Run async RAG agent safely
