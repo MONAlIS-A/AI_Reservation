@@ -203,8 +203,12 @@ async def run_tool(name, args, business_id=None, website_url=None):
 
 async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     try:
-        biz = await sync_to_async(Business.objects.get)(id=business_id)
-    except Exception: return "Business not found."
+        # Better lookup for production (handling potential type mismatches)
+        biz = await sync_to_async(Business.objects.filter(id=int(business_id)).first)()
+        if not biz:
+            return f"Business ID {business_id} not found in the database. Please check your URL."
+    except Exception as e: 
+        return f"Database Error: {str(e)}"
 
     llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.5)
     

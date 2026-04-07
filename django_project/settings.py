@@ -63,7 +63,15 @@ CORS_ALLOWED_ORIGINS = [
     "https://ai-reservation-crm-system.onrender.com",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True # Set to True for testing to ensure no blocking
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
+# Production Security for Cookies/Sessions
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+SESSION_SAVE_EVERY_REQUEST = True
 
 CORS_ALLOW_HEADERS = ["*"]
 CORS_ALLOW_METHODS = ["*"]
