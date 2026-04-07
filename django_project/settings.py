@@ -55,26 +55,31 @@ REST_FRAMEWORK = {
     ],
 }
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://ai-reservation-crm-system.onrender.com",
-]
-
+# CORS & CSRF
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "https://ai-reservation-crm-system.onrender.com",
+    "https://ai-reservation.onrender.com",
 ]
-
-CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
-# Production Security for Cookies/Sessions
+from corsheaders.defaults import default_headers, default_methods
+CORS_ALLOW_HEADERS = list(default_headers)
+CORS_ALLOW_METHODS = list(default_methods)
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://ai-reservation-crm-system.onrender.com",
+    "https://ai-reservation.onrender.com",
+]
+
+# Sessions & Cookies (Production)
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 86400  # 1 day
+SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
-SESSION_SAVE_EVERY_REQUEST = True
-
-CORS_ALLOW_HEADERS = ["*"]
-CORS_ALLOW_METHODS = ["*"]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
@@ -170,4 +175,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+
 
