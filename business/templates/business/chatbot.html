@@ -190,16 +190,19 @@
     const sendBtn = document.getElementById('send-btn');
     const businessId = "{{ business.id }}";
 
-    // ✅ Persistent User Identifier
-    const getUserId = () => {
-        let uid = localStorage.getItem('ai_chat_user_id');
-        if (!uid) {
-            uid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-            localStorage.setItem('ai_chat_user_id', uid);
-        }
-        return uid;
+    // ✅ Client-Side History Buffer (No Identity-ID dependence)
+    const getChatBuffer = () => {
+        const buf = localStorage.getItem(`chat_buffer_${businessId}`);
+        return buf ? JSON.parse(buf) : [];
     };
-    const userId = getUserId();
+
+    const updateChatBuffer = (role, content) => {
+        const buf = getChatBuffer();
+        buf.push({ role, content });
+        // Keep ONLY last 10 messages for memory
+        if (buf.length > 20) buf.shift(); 
+        localStorage.setItem(`chat_buffer_${businessId}`, JSON.stringify(buf));
+    };
 
     function addMessage(text, isUser, products = []) {
         const msgDiv = document.createElement('div');
@@ -246,6 +249,8 @@
         userInput.value = '';
         userInput.disabled = true;
 
+        const chatBuffer = getChatBuffer();
+
         const typing = document.createElement('div');
         typing.className = 'typing';
         typing.textContent = 'Thinking...';
@@ -260,15 +265,21 @@
                 },
                 body: JSON.stringify({ 
                     message: text,
-                    user_id: userId
+                    chat_history: chatBuffer 
                 })
             });
 
             const data = await response.json();
-            chatMessages.removeChild(typing);
-            addMessage(data.answer, false, data.products);
+            if (chatMessages.contains(typing)) chatMessages.removeChild(typing);
+            
+            if (data.answer) {
+                addMessage(data.answer, false, data.products);
+                // Update Local Buffer for ID-less Memory
+                updateChatBuffer('user', text);
+                updateChatBuffer('assistant', data.answer);
+            }
         } catch (error) {
-            if (typing.parentNode) chatMessages.removeChild(typing);
+            if (chatMessages.contains(typing)) chatMessages.removeChild(typing);
             addMessage("Sorry, I encountered an error connecting to the server.", false);
         } finally {
             userInput.disabled = false;

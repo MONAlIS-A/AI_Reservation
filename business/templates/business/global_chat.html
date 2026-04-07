@@ -117,16 +117,17 @@
     const sendBtn = document.getElementById('send-btn');
     const typing = document.getElementById('typing');
 
-    // ✅ Persistent User Identifier for Product Level
-    const getUserId = () => {
-        let uid = localStorage.getItem('ai_chat_user_id');
-        if (!uid) {
-            uid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-            localStorage.setItem('ai_chat_user_id', uid);
-        }
-        return uid;
-    };
-    const userId = getUserId();
+    // ✅ Global Client-Side History Buffer
+    const getGlobalBuffer = () => {
+        const buf = localStorage.getItem('global_chat_history');
+        return buf ? JSON.parse(buf) : [];
+    }
+    const updateGlobalBuffer = (role, content) => {
+        const buf = getGlobalBuffer();
+        buf.push({ role, content });
+        if (buf.length > 20) buf.shift();
+        localStorage.setItem('global_chat_history', JSON.stringify(buf));
+    }
 
     function append(text, isUser) {
         const div = document.createElement('div');
@@ -155,6 +156,8 @@
         
         input.value = ''; input.disabled = true; typing.style.display = 'block';
 
+        const globalBuffer = getGlobalBuffer();
+
         try {
             const resp = await fetch('/api/global-chat/', {
                 method: 'POST',
@@ -164,13 +167,16 @@
                 },
                 body: JSON.stringify({ 
                     message: text,
-                    user_id: userId
+                    chat_history: globalBuffer
                 })
             });
             const data = await resp.json();
             typing.style.display = 'none';
             if(data.answer) {
                 append(data.answer, false);
+                // Update Local Buffer
+                updateGlobalBuffer('user', text);
+                updateGlobalBuffer('assistant', data.answer);
             }
         } catch (e) {
             typing.style.display = 'none';
@@ -181,7 +187,8 @@
     }
 
     window.onload = () => {
-        // Automatically ask AI for business list on load
+        // Clear old buffer on load if you want a fresh start, or keep it.
+        // For identifying user, let's keep it.
         submit("Identify yourself as the 'Multi-Business Discovery Assistant'. List all businesses concisely and request input on which service the user requires.");
     };
 
