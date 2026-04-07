@@ -88,7 +88,8 @@ def global_chat_page(request):
 # -------------------------------
 def global_chat_api(request):
     if not request.session.session_key:
-        request.session.save()
+        request.session.create()
+    session_id = request.session.session_key
     request.session.modified = True
 
     if request.method == 'POST':
@@ -98,7 +99,7 @@ def global_chat_api(request):
 
             # Load history from Database
             db_history = ChatHistory.objects.filter(
-                session_key=request.session.session_key,
+                session_key=session_id,
                 business__isnull=True
             ).order_by('created_at')
             history = [{'role': h.role, 'content': h.content} for h in db_history]
@@ -110,8 +111,8 @@ def global_chat_api(request):
             )
 
             # Persist to Database
-            ChatHistory.objects.create(session_key=request.session.session_key, role='user', content=user_query)
-            ChatHistory.objects.create(session_key=request.session.session_key, role='assistant', content=bot_answer)
+            ChatHistory.objects.create(session_key=session_id, role='user', content=user_query)
+            ChatHistory.objects.create(session_key=session_id, role='assistant', content=bot_answer)
 
             return JsonResponse({'answer': bot_answer})
 
@@ -126,7 +127,8 @@ def global_chat_api(request):
 # -------------------------------
 def chat_api(request, business_id):
     if not request.session.session_key:
-        request.session.save()
+        request.session.create()
+    session_id = request.session.session_key
     request.session.modified = True
 
     if request.method == 'POST':
@@ -139,7 +141,7 @@ def chat_api(request, business_id):
 
             # Load history from Database
             db_history = ChatHistory.objects.filter(
-                session_key=request.session.session_key,
+                session_key=session_id,
                 business_id=business_id
             ).order_by('created_at')
             history = [{'role': h.role, 'content': h.content} for h in db_history]
@@ -153,13 +155,13 @@ def chat_api(request, business_id):
 
             # Persist to Database
             ChatHistory.objects.create(
-                session_key=request.session.session_key, 
+                session_key=session_id, 
                 business_id=business_id, 
                 role='user', 
                 content=user_query
             )
             ChatHistory.objects.create(
-                session_key=request.session.session_key, 
+                session_key=session_id, 
                 business_id=business_id, 
                 role='assistant', 
                 content=bot_answer
