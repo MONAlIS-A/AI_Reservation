@@ -102,9 +102,16 @@ def global_chat_api(request):
                 chat_history=history
             )
 
+            # ✅ Cleanup: Delete records older than 1 hour for this user
+            from django.utils import timezone
+            from datetime import timedelta
+            one_hour_ago = timezone.now() - timedelta(hours=1)
+            
             # Backup Log (Stateless AI doesn't strictly need this, but good for logs)
             user_id = data.get('user_id') or request.session.session_key
             with transaction.atomic():
+                if user_id:
+                    ChatHistory.objects.filter(user_id=user_id, created_at__lt=one_hour_ago).delete()
                 ChatHistory.objects.create(user_id=user_id, role='user', content=user_query)
                 ChatHistory.objects.create(user_id=user_id, role='assistant', content=bot_answer)
 
@@ -144,9 +151,16 @@ def chat_api(request, business_id):
                 chat_history=history
             )
 
+            # ✅ Cleanup: Delete records older than 1 hour for this user/business
+            from django.utils import timezone
+            from datetime import timedelta
+            one_hour_ago = timezone.now() - timedelta(hours=1)
+
             # OPTIONAL: Save to DB for internal analytics (but AI doesn't NEED it anymore)
             user_id = data.get('user_id') or request.session.session_key
             with transaction.atomic():
+                if user_id:
+                    ChatHistory.objects.filter(user_id=user_id, created_at__lt=one_hour_ago).delete()
                 ChatHistory.objects.create(
                     user_id=user_id, 
                     business_id=business_id, 

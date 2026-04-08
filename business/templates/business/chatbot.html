@@ -192,6 +192,16 @@
 
     // ✅ Client-Side History Buffer (No Identity-ID dependence)
     const getChatBuffer = () => {
+        const lastInteraction = localStorage.getItem(`chat_last_interaction_${businessId}`);
+        if (lastInteraction) {
+            const timePassed = Date.now() - parseInt(lastInteraction);
+            if (timePassed > 3600000) { // 1 hour in ms
+                localStorage.removeItem(`chat_buffer_${businessId}`);
+                localStorage.removeItem(`chat_last_interaction_${businessId}`);
+                console.log("Chat history expired.");
+                return [];
+            }
+        }
         const buf = localStorage.getItem(`chat_buffer_${businessId}`);
         return buf ? JSON.parse(buf) : [];
     };
@@ -199,9 +209,10 @@
     const updateChatBuffer = (role, content) => {
         const buf = getChatBuffer();
         buf.push({ role, content });
-        // Keep ONLY last 10 messages for memory
+        // Keep ONLY last 20 messages for memory (approx 10 turns)
         if (buf.length > 20) buf.shift(); 
         localStorage.setItem(`chat_buffer_${businessId}`, JSON.stringify(buf));
+        localStorage.setItem(`chat_last_interaction_${businessId}`, Date.now().toString());
     };
 
     function addMessage(text, isUser, products = []) {

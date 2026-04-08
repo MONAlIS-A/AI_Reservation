@@ -76,11 +76,27 @@ def scrape_business_website(url, query=""):
                         items = [data]
                 
                 if items:
+                    # ✅ Smart Filtering: If query is provided, filter the JSON items first
+                    if query and len(items) > 1:
+                        query_lower = query.lower()
+                        items = [
+                            it for it in items 
+                            if query_lower in str(it.get('name', '')).lower() or 
+                               query_lower in str(it.get('description', '')).lower() or
+                               any(query_lower in str(kw).lower() for kw in it.get('keywords', []))
+                        ]
+
                     products = []
-                    for item in items[:10]: # Limit to 10
+                    for item in items[:15]: # Limit to 15
                         if not isinstance(item, dict): continue
                         name = item.get('name') or item.get('title') or "Unknown Product"
-                        price = item.get('price') or item.get('amount') or item.get('sale_price') or "N/A"
+                        
+                        # Handle varied price keys
+                        price = item.get('price') or item.get('amount') or item.get('sale_price') or item.get('priceCents')
+                        if item.get('priceCents'):
+                            price = f"${item.get('priceCents')/100:.2f}"
+                        if not price: price = "N/A"
+
                         image = item.get('image') or item.get('thumbnail') or item.get('img_url') or item.get('picture') or ""
                         link = item.get('link') or item.get('url') or item.get('product_url') or url
                         
@@ -113,8 +129,8 @@ def scrape_business_website(url, query=""):
             clean_text = soup.get_text(separator=' ')
             full_context = f"Website Content: {clean_text[:4000]}\n\nMedia/Links:\n" + "\n".join(elements[:20])
             return full_context[:8000] 
-    except Exception as e: return f"Error accessing URL: {str(e)}"
-    return "No content retrieved."
+    except Exception as e: return f"Error accessing URL: {str(e)}. Please visit the website directly for info."
+    return f"No content retrieved. You can visit the link here: {url}"
 
 # --- Manual Tool Runner ---
 async def run_tool(name, args, business_id=None, website_url=None):
@@ -134,10 +150,10 @@ async def run_tool(name, args, business_id=None, website_url=None):
         # Dynamic website and query override
         exec_url = args.get("url", website_url)
         search_query = args.get("query", "")
-        if not exec_url and exec_biz_id:
+        if (not exec_url or exec_url == "null") and exec_biz_id:
             try:
-                biz = await sync_to_async(Business.objects.get)(id=exec_biz_id)
-                exec_url = biz.website_url
+                biz = await sync_to_async(Business.objects.filter(id=int(exec_biz_id)).first)()
+                if biz: exec_url = biz.website_url
             except Exception: pass
         if not exec_url: return "No website available to search."
         
@@ -160,27 +176,34 @@ async def run_tool(name, args, business_id=None, website_url=None):
 
     elif name == "search_across_businesses":
         try:
-            # Query all businesses' docs
-            if args.get("query", "").lower() in ["list all", "hello", "hi", "all businesses"]:
+            # Enhanced multi-business directory
+            if args.get("query", "").lower() in ["list all", "hello", "hi", "all businesses", "identify yourself"]:
                 businesses = await sync_to_async(lambda: list(Business.objects.all()))()
                 from urllib.parse import quote
                 results = []
                 for biz in businesses:
                     encoded_name = quote(biz.name)
-                    results.append(f"Business ID: {biz.id} | Name: {biz.name} | EncodedName: {encoded_name} | Desc: {str(biz.description)[:100]}...")
-                return "\n".join(results)
+                    # Summarize services if possible, otherwise use short desc
+                    services = str(biz.description)[:150]
+                    results.append(f"- **{biz.name}** (ID: {biz.id}, URL: {biz.website_url}): Offers {services}...")
+                return "Directory of Available Businesses and Services:\n\n" + "\n".join(results)
             
             vector_db = await sync_to_async(build_pipeline_and_get_db)(business_id=None)
             if vector_db:
-                sim_docs = vector_db.similarity_search(args.get("query", ""), k=5)
+                sim_docs = vector_db.similarity_search(args.get("query", ""), k=6)
                 results = []
                 from urllib.parse import quote
                 for d in sim_docs:
                     biz_id = d.metadata.get('business_id')
                     biz_name = d.metadata.get('business_name')
+                    biz_url = "Unknown"
+                    try:
+                        biz_obj = await sync_to_async(Business.objects.filter(id=biz_id).first)()
+                        if biz_obj: biz_url = biz_obj.website_url
+                    except: pass
                     encoded_name = quote(biz_name)
-                    results.append(f"Business: {biz_name} (ID: {biz_id}, EncodedName: {encoded_name})\nDetails Section: {d.page_content}")
-                return "\n---\n".join(results)
+                    results.append(f"Business: {biz_name} (ID: {biz_id}, URL: {biz_url}, EncodedName: {encoded_name})\nSummary: {d.page_content}")
+                return "Relevant matches found across the partner network:\n\n" + "\n---\n".join(results)
         except Exception as e: return f"Error: {str(e)}"
         return "No businesses found matching this query."
 
@@ -400,14 +423,15 @@ async def aget_global_rag_answer(query, chat_history=None):
             "type": "function",
             "function": {
                 "name": "search_website",
-                "description": "Search the website of a specific business by its ID.",
+                "description": "Search the website of a specific business by its ID for products, services, or specific items.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
                         "business_id": {"type": "integer"},
-                        "url": {"type": "string"}
+                        "url": {"type": "string"},
+                        "query": {"type": "string", "description": "Specific product or service name to look for."}
                     }, 
-                    "required": ["business_id", "url"]
+                    "required": ["business_id", "url", "query"]
                 }
             }
         },
@@ -443,13 +467,18 @@ async def aget_global_rag_answer(query, chat_history=None):
     system_prompt = f"""
     You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
     {summary_text}
-    CORE MEMORY & DEEP ANALYSIS (STRICT):
-    - ALWAYS analyze the conversation history provided in the RECENT MESSAGES section below.
-    - If the user previously mentioned their name, business preference, or any fact, YOU MUST REMEMBER IT.
-    - If asked "Who am I?", answer based on the facts found in history.
+    
+    GUIDELINES:
+    1. INITIALIZATION: Start by listing ALL available businesses and their primary services concisely.
+    2. PROACTIVE SEARCHING: If a user asks about a specific product/service (e.g. "Matte Liquid Foundation") OR mentions a specific business (e.g. "Product Business"), DO NOT ASK FOR MORE DETAILS. IMMEDIATELY use 'search_across_businesses' or 'search_website' to find it.
+    3. SPECIFIC BUSINESS MENTION: If the user names a business, ALWAYS use 'search_website' for that business's URL to get the latest product catalog.
+    4. SERVICE MATCHING: If a service is in multiple businesses, list all of them clearly.
+    5. PRODUCT DEEP-DIVE:
+       - If URL is API (JSON), show products with Name, Price, Image, and Link.
+       - If URL is Website, scrape it. If scraping fails or finds nothing, provide the direct Website Link.
 
-    TASK: Help the user find businesses and provide handoff links.
-    - Direct links: [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
+    6. HANDOFF: Provide direct links to business receptionists:
+       [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     """

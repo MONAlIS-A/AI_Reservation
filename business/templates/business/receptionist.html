@@ -158,6 +158,16 @@
 
     // ✅ Front-End History Management (Stateless)
     const getChatBuffer = () => {
+        const lastInteraction = localStorage.getItem(`chat_last_interaction_${bizId}`);
+        if (lastInteraction) {
+            const timePassed = Date.now() - parseInt(lastInteraction);
+            if (timePassed > 3600000) { // 1 hour in ms (60 * 60 * 1000)
+                localStorage.removeItem(`chat_buffer_${bizId}`);
+                localStorage.removeItem(`chat_last_interaction_${bizId}`);
+                console.log("Chat history expired (1 hour passed). Memory cleared.");
+                return [];
+            }
+        }
         const buf = localStorage.getItem(`chat_buffer_${bizId}`);
         return buf ? JSON.parse(buf) : [];
     };
@@ -168,6 +178,7 @@
         // Keep last 10 messages for token efficiency
         if (buf.length > 20) buf.shift(); 
         localStorage.setItem(`chat_buffer_${bizId}`, JSON.stringify(buf));
+        localStorage.setItem(`chat_last_interaction_${bizId}`, Date.now().toString());
     };
 
     // Speech Recognition

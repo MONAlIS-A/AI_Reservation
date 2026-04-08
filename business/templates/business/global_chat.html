@@ -119,6 +119,16 @@
 
     // ✅ Global Client-Side History Buffer
     const getGlobalBuffer = () => {
+        const lastInteraction = localStorage.getItem('global_chat_last_interaction');
+        if (lastInteraction) {
+            const timePassed = Date.now() - parseInt(lastInteraction);
+            if (timePassed > 3600000) { // 1 hour in ms
+                localStorage.removeItem('global_chat_history');
+                localStorage.removeItem('global_chat_last_interaction');
+                console.log("Global chat history expired.");
+                return [];
+            }
+        }
         const buf = localStorage.getItem('global_chat_history');
         return buf ? JSON.parse(buf) : [];
     }
@@ -127,6 +137,7 @@
         buf.push({ role, content });
         if (buf.length > 20) buf.shift();
         localStorage.setItem('global_chat_history', JSON.stringify(buf));
+        localStorage.setItem('global_chat_last_interaction', Date.now().toString());
     }
 
     function append(text, isUser) {
@@ -187,9 +198,8 @@
     }
 
     window.onload = () => {
-        // Clear old buffer on load if you want a fresh start, or keep it.
-        // For identifying user, let's keep it.
-        submit("Identify yourself as the 'Multi-Business Discovery Assistant'. List all businesses concisely and request input on which service the user requires.");
+        // Updated initial prompt to trigger multi-business service summary
+        submit("Identify yourself as the 'Multi-Business Discovery Assistant'. Initially, list all available services across our partner network and specify which business provides each one. Ask the user which service or business they are interested in.");
     };
 
     sendBtn.onclick = () => submit();
