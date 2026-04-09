@@ -163,6 +163,33 @@
         }
 
         .typing { font-style: italic; color: var(--text-dim); font-size: 12px; margin-top: 5px; }
+
+        /* Suggestions Styling */
+        .suggestions-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 0 20px 10px;
+            background: #F9FAFB;
+        }
+
+        .suggestion-chip {
+            background: white;
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-main);
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .suggestion-chip:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            background: #F3F4FF;
+        }
     </style>
 </head>
 <body>
@@ -173,10 +200,9 @@
         <h3 style="margin:0; font-size:16px;">Chat with {{ business.name }}</h3>
     </div>
     <div id="chat-messages">
-        <div class="message bot-message">
-            Professional AI Assistant for <strong>{{ business.name }}</strong>. Please specify your query or booking requirement.
         </div>
     </div>
+    <div id="suggestions-area" class="suggestions-container"></div>
     <div class="chat-input-area">
         {% csrf_token %}
         <input type="text" id="user-input" placeholder="Ask a question..." autocomplete="off">
@@ -252,11 +278,32 @@
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
+    function renderSuggestions(suggestions) {
+        const area = document.getElementById('suggestions-area');
+        area.innerHTML = '';
+        if (!suggestions || suggestions.length === 0) return;
+
+        suggestions.forEach(text => {
+            const chip = document.createElement('div');
+            chip.className = 'suggestion-chip';
+            chip.textContent = text;
+            chip.onclick = () => {
+                userInput.value = text;
+                userInput.focus();
+            };
+            area.appendChild(chip);
+        });
+    }
+
     async function sendMessage() {
         const text = userInput.value.trim();
         if (!text) return;
 
         addMessage(text, true);
+        
+        // Clear suggestions
+        document.getElementById('suggestions-area').innerHTML = '';
+
         userInput.value = '';
         userInput.disabled = true;
 
@@ -288,6 +335,11 @@
                 // Update Local Buffer for ID-less Memory
                 updateChatBuffer('user', text);
                 updateChatBuffer('assistant', data.answer);
+
+                // ✅ Render Suggestions
+                if (data.suggestions) {
+                    renderSuggestions(data.suggestions);
+                }
             }
         } catch (error) {
             if (chatMessages.contains(typing)) chatMessages.removeChild(typing);

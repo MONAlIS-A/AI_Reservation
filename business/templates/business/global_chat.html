@@ -81,6 +81,44 @@
         .btn-action:hover { transform: scale(1.05) translateY(-2px); box-shadow: 0 5px 15px rgba(79, 70, 229, 0.4); }
 
         .typing-indicator { color: var(--primary); font-size: 0.95rem; margin-bottom: 15px; display: none; font-weight: 500; }
+
+        /* Suggestions Styling */
+        .suggestions-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .suggestion-chip {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glass);
+            padding: 10px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            color: #E2E8F0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .suggestion-chip:hover {
+            background: rgba(79, 70, 229, 0.15);
+            border-color: var(--primary);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .suggestion-chip svg {
+            width: 16px;
+            height: 16px;
+            color: var(--primary);
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
@@ -100,6 +138,8 @@
     
     <div class="typing-indicator" id="typing">Voyager is retrieving partner network...</div>
 
+    <div id="suggestions-area" class="suggestions-container"></div>
+    
     <div class="input-container">
         {% csrf_token %}
         <div class="input-bar-container">
@@ -159,12 +199,35 @@
         msgs.scrollTop = msgs.scrollHeight;
     }
 
+    function renderSuggestions(suggestions) {
+        const area = document.getElementById('suggestions-area');
+        area.innerHTML = '';
+        if (!suggestions || suggestions.length === 0) return;
+
+        suggestions.forEach(text => {
+            const chip = document.createElement('div');
+            chip.className = 'suggestion-chip';
+            chip.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                ${text}
+            `;
+            chip.onclick = () => {
+                input.value = text;
+                input.focus();
+            };
+            area.appendChild(chip);
+        });
+    }
+
     async function submit(customMsg = null) {
         const text = customMsg || input.value.trim();
         if(!text) return;
 
         if(!customMsg) append(text, true);
         
+        // Clear old suggestions
+        document.getElementById('suggestions-area').innerHTML = '';
+
         input.value = ''; input.disabled = true; typing.style.display = 'block';
 
         const globalBuffer = getGlobalBuffer();
@@ -182,12 +245,18 @@
                 })
             });
             const data = await resp.json();
+            console.log("AI Response Data:", data);
             typing.style.display = 'none';
             if(data.answer) {
                 append(data.answer, false);
                 // Update Local Buffer
                 updateGlobalBuffer('user', text);
                 updateGlobalBuffer('assistant', data.answer);
+                
+                // ✅ Render suggestions if available
+                if (data.suggestions) {
+                    renderSuggestions(data.suggestions);
+                }
             }
         } catch (e) {
             typing.style.display = 'none';
@@ -198,8 +267,8 @@
     }
 
     window.onload = () => {
-        // Updated initial prompt to trigger multi-business service summary
-        submit("Identify yourself as the 'Multi-Business Discovery Assistant'. Initially, list all available services across our partner network and specify which business provides each one. Ask the user which service or business they are interested in.");
+        // Force the use of search_across_businesses tool for real data
+        submit("Use the 'search_across_businesses' tool with query='list all' to get the real directory. List the services first, then the business name, using this format: '- **[Service]** — [Business Name]'. Do not use numbers.");
     };
 
     sendBtn.onclick = () => submit();

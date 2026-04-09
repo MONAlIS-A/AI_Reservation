@@ -76,7 +76,7 @@ def scrape_business_website(url, query=""):
                         items = [data]
                 
                 if items:
-                    # ✅ Smart Filtering: If query is provided, filter the JSON items first
+                    # Smart Filtering: If query is provided, filter the JSON items first
                     if query and len(items) > 1:
                         query_lower = query.lower()
                         items = [
@@ -183,10 +183,14 @@ async def run_tool(name, args, business_id=None, website_url=None):
                 results = []
                 for biz in businesses:
                     encoded_name = quote(biz.name)
-                    # Summarize services if possible, otherwise use short desc
-                    services = str(biz.description)[:150]
-                    results.append(f"- **{biz.name}** (ID: {biz.id}, URL: {biz.website_url}): Offers {services}...")
-                return "Directory of Available Businesses and Services:\n\n" + "\n".join(results)
+                    # Create a clean: **Service** — [Business Name](Link) format
+                    # Using description as service for now
+                    service_summary = str(biz.description).split('.')[0][:50]
+                    results.append(f"- **{service_summary}** — [{biz.name}](https://ai-reservation.onrender.com/receptionist/{encoded_name}/)")
+                
+                header = "## 🌐 Partner Network Directory\nHere are the available services across our partner network:\n\n"
+                footer = "\n\nPlease let me know which service or business you are interested in!"
+                return header + "\n".join(results) + footer
             
             vector_db = await sync_to_async(build_pipeline_and_get_db)(business_id=None)
             if vector_db:
@@ -249,6 +253,39 @@ async def asummarize_chat_history(chat_history):
     except Exception:
         return ""
 
+async def agenerate_suggestions(answer):
+    """
+    Generates 3 smart, analytical follow-up suggestions based on the AI's response.
+    It predicts the user's next logical step (e.g., pricing for products, booking for services).
+    """
+    try:
+        llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.7)
+        prompt = f"""
+        You are a Strategic Question Generator. Analyze the AI Response below and provided context to generate EXACTLY 3 full-sentence follow-up questions.
+        
+        CRITICAL RULES:
+        1. FORM: Each suggestion must be a clear, professional QUESTION (e.g., "What are the specific pricing plans for...?")
+        2. CONTEXT: Only ask questions that the AI can answer based on the businesses or services mentioned in the response.
+        3. VALUE: The questions should help the user get the most important information (Pricing, Booking, Services) from the documentation.
+        4. RELIABILITY: Ensure the user's next click leads to a useful, accurate answer from the system.
+
+        AI Response: 
+        {answer}
+
+        Suggestions (3 '|' separated full questions):
+        """
+        res = await llm.ainvoke([SystemMessage(content=prompt)])
+        text = res.content.replace('"', '').replace("'", "")
+        # Use pipe separator instead of comma to handle questions with commas
+        suggestions = [s.strip() for s in text.split("|") if s.strip()]
+        
+        # Ensure exactly 3 items
+        if len(suggestions) < 3:
+            suggestions.extend(["Tell me more", "Pricing details", "How to book"][:3-len(suggestions)])
+        return suggestions[:3]
+    except Exception:
+        return ["List products", "Check pricing", "How to book"]
+    
 async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     try:
         # Better lookup for production (handling potential type mismatches)
@@ -334,13 +371,13 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
         }
     ]
     
-    # 🔥 Automated Summarization & Windowing (The Production Solution)
+    # Automated Summarization & Windowing (The Production Solution)
     summary = await asummarize_chat_history(chat_history)
     
     summary_text = f"\nLONG-TERM MEMORY (SUMMARY of past events):\n{summary}\n" if summary else ""
     
     system_prompt = f"""
-    You are the 'AI Receptionist' for {biz.name}. You are professional, empathetic, and direct. 😊
+    You are the 'AI Receptionist' for {biz.name}. You are professional, empathetic, and direct.
     {summary_text}
     CORE MEMORY & IDENTITY (STRICT):
     - ALWAYS analyze the 'LONG-TERM MEMORY' (if present) and the 'RECENT MESSAGES' below before answering.
@@ -359,7 +396,7 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     
     messages = [SystemMessage(content=system_prompt)]
     
-    # 🔥 Windowing: Send ONLY LAST 4 messages back to AI to save tokens
+    # Windowing: Send ONLY LAST 4 messages back to AI to save tokens
     recent_history = chat_history[-6:] if chat_history else []
     
     if recent_history:
@@ -387,7 +424,8 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
         except Exception as e:
             return f"I had a tiny problem: {str(e)}"
 
-    return messages[-1].content
+    suggestions = await agenerate_suggestions(messages[-1].content)
+    return messages[-1].content + f"\n\n[SUGGESTIONS] {' | '.join([f'\"{s}\"' for s in suggestions])} [/SUGGESTIONS]"
 
 async def aget_global_rag_answer(query, chat_history=None):
     """
@@ -460,22 +498,20 @@ async def aget_global_rag_answer(query, chat_history=None):
         }
     ]
     
-    # 🔥 Automated Summarization & Windowing
+    # Automated Summarization & Windowing
     summary = await asummarize_chat_history(chat_history)
     summary_text = f"\nLONG-TERM MEMORY (SUMMARY of past events):\n{summary}\n" if summary else ""
 
     system_prompt = f"""
-    You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct. 😊
+    You are 'Multi-Business AI Discovery'. You are professional, empathetic, and direct.
     {summary_text}
-    
-    GUIDELINES:
-    1. INITIALIZATION: Start by listing ALL available businesses and their primary services concisely.
-    2. PROACTIVE SEARCHING: If a user asks about a specific product/service (e.g. "Matte Liquid Foundation") OR mentions a specific business (e.g. "Product Business"), DO NOT ASK FOR MORE DETAILS. IMMEDIATELY use 'search_across_businesses' or 'search_website' to find it.
-    3. SPECIFIC BUSINESS MENTION: If the user names a business, ALWAYS use 'search_website' for that business's URL to get the latest product catalog.
-    4. SERVICE MATCHING: If a service is in multiple businesses, list all of them clearly.
-    5. PRODUCT DEEP-DIVE:
-       - If URL is API (JSON), show products with Name, Price, Image, and Link.
-       - If URL is Website, scrape it. If scraping fails or finds nothing, provide the direct Website Link.
+    GUIDELINES (STRICT & MANDATORY):
+    1. INITIALIZATION: You MUST ALWAYS use the 'search_across_businesses' tool with query='list all' to get the real directory. 
+    2. NEVER HALLUCINATE: Never make up business names like 'Powerhouse Gym' or 'Dream 11'. Only use data from tools.
+    3. FORMATTING (CRITICAL): List businesses EXACTLY like this: "- **[Main Service/Description]** — [Business Name]".
+    4. NO NUMBERS: Do not use numbered lists (1, 2, 3). Use bullet points (-).
+    5. NO PROVIDED BY: Never use the words "provided by". Use the dash "—".
+    6. PROACTIVE: Immediately use tools if the user mentions a service or name.
 
     6. HANDOFF: Provide direct links to business receptionists:
        [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
@@ -485,7 +521,7 @@ async def aget_global_rag_answer(query, chat_history=None):
 
     messages = [SystemMessage(content=system_prompt)]
     
-    # 🔥 Windowing: More generous 10 message history
+    # Windowing: More generous 12 message history
     recent_history = chat_history[-12:] if chat_history else []
     
     if recent_history:
@@ -513,7 +549,8 @@ async def aget_global_rag_answer(query, chat_history=None):
         except Exception as e:
             return f"Error: {str(e)}"
 
-    return messages[-1].content
+    suggestions = await agenerate_suggestions(messages[-1].content)
+    return messages[-1].content + f"\n\n[SUGGESTIONS] {' | '.join([f'\"{s}\"' for s in suggestions])} [/SUGGESTIONS]"
 
 def get_rag_answer_with_agent(business_id, query, chat_history=None):
     import asyncio

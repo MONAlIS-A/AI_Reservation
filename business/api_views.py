@@ -77,7 +77,18 @@ class GlobalChatAPIView(APIView):
         try:
             user_query = "Hello! Please list all available businesses with a short description of their services, and then ask me how you can help me today."
             bot_answer = async_to_sync(aget_global_rag_answer)(user_query)
-            return Response({'answer': bot_answer})
+            
+            # Extract suggestions
+            suggestions = []
+            if "[SUGGESTIONS]" in bot_answer:
+                parts = bot_answer.split("[SUGGESTIONS]")
+                bot_answer = parts[0].strip()
+                sug_part = parts[1].split("[/SUGGESTIONS]")[0]
+                try:
+                    suggestions = [s.strip().strip('"').strip("'") for s in sug_part.split("|")]
+                except: pass
+                
+            return Response({'answer': bot_answer, 'suggestions': suggestions})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -122,7 +133,18 @@ class GlobalChatAPIView(APIView):
                 user_query, 
                 chat_history=history
             )
-            return Response({'answer': bot_answer})
+            
+            # Extract suggestions
+            suggestions = []
+            if "[SUGGESTIONS]" in bot_answer:
+                parts = bot_answer.split("[SUGGESTIONS]")
+                bot_answer = parts[0].strip()
+                sug_part = parts[1].split("[/SUGGESTIONS]")[0]
+                try:
+                    suggestions = [s.strip().strip('"').strip("'") for s in sug_part.split("|")]
+                except: pass
+
+            return Response({'answer': bot_answer, 'suggestions': suggestions})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -180,7 +202,18 @@ class ChatAPIView(APIView):
                 user_query, 
                 chat_history=history
             )
-            return Response({'answer': bot_answer, 'products': []})
+
+            # Extract suggestions
+            suggestions = []
+            if "[SUGGESTIONS]" in bot_answer:
+                parts = bot_answer.split("[SUGGESTIONS]")
+                bot_answer = parts[0].strip()
+                sug_part = parts[1].split("[/SUGGESTIONS]")[0]
+                try:
+                    suggestions = [s.strip().strip('"').strip("'") for s in sug_part.split("|")]
+                except: pass
+
+            return Response({'answer': bot_answer, 'products': [], 'suggestions': suggestions})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
