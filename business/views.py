@@ -5,7 +5,90 @@ from .forms import BusinessForm
 from .models import Business, ChatHistory
 from .rag import build_pipeline_and_get_db, aget_rag_answer_with_agent, aget_global_rag_answer
 from asgiref.sync import async_to_sync
+import httpx
+import os
 import json
+
+
+from external_db_handler import check_availability as db_check_availability, create_booking_ext as db_create_booking
+
+
+# -------------------------------
+# Realtime Tools API
+# -------------------------------
+@csrf_exempt
+def check_availability_api(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body)
+        service = data.get('service')
+        time = data.get('time')
+        result = db_check_availability(service, time)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def create_booking_api(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        data = json.loads(request.body)
+        result = db_create_booking(
+            data.get('service'),
+            data.get('time'),
+            data.get('name'),
+            data.get('phone'),
+            data.get('notes', '')
+        )
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# -------------------------------
+# Realtime Session (WebRTC)
+# -------------------------------
+@csrf_exempt
+def realtime_session_view(request):
+    """
+    Fetch an ephemeral session token from OpenAI for client-side WebRTC connection.
+    Bypasses Render's WebSocket limitations by connecting directly from browser.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        return JsonResponse({'error': 'OPENAI_API_KEY not configured on server'}, status=500)
+
+    try:
+        # Request a temporary session from OpenAI
+        with httpx.Client() as client:
+            response = client.post(
+                "https://api.openai.com/v1/realtime/sessions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o-realtime-preview-2024-12-17",
+                    "voice": "alloy",
+                },
+                timeout=10.0
+            )
+        
+        if response.status_code != 200:
+            return JsonResponse({
+                'error': f'OpenAI session API failed: {response.status_code}',
+                'details': response.text
+            }, status=response.status_code)
+            
+        return JsonResponse(response.json())
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to fetch session: {str(e)}'}, status=500)
 
 
 # -------------------------------

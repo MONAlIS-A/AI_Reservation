@@ -141,7 +141,7 @@ registerProcessor('mic-proc', MicProc);
 `;
 
 // --- State ---
-let ws, ctx, stream, worklet, nextT = 0, live = false;
+let pc, dc, stream, live = false;
 
 // --- DOM ---
 const btn    = document.getElementById('callBtn');
@@ -168,130 +168,215 @@ function status(msg, type) {
 btn.onclick = () => { live ? hangup() : connect(); };
 
 async function connect() {
-    log('Button clicked - starting...');
+    log('Starting direct WebRTC connection...');
     status('Requesting microphone...', '');
     btn.textContent = '...';
 
     try {
-        // 1. Mic
+        // 1. Get Ephemeral Token from our Django Backend
+        log('Fetching session token from backend...');
+        const tokenResponse = await fetch('/api/realtime-session/', { 
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const sessionData = await tokenResponse.json();
+        
+        if (sessionData.error) throw new Error(sessionData.error);
+        const EPHEMERAL_KEY = sessionData.client_secret.value;
+        log('Session token received (valid for 1 min)');
+
+        // 2. Setup RTCPeerConnection
+        pc = new RTCPeerConnection();
+        log('RTCPeerConnection initialized');
+
+        // 3. Setup Audio Playback
+        const audioEl = document.createElement("audio");
+        audioEl.autoplay = true;
+        pc.ontrack = e => {
+            log('Audio track received from OpenAI');
+            audioEl.srcObject = e.streams[0];
+            bars.classList.add('live');
+        };
+
+        // 4. Setup Microphone Input
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        log('Mic OK - sample rate will be detected via AudioContext');
+        pc.addTrack(stream.getTracks()[0]);
+        log('Microphone track added');
 
-        // 2. AudioContext
-        ctx = new AudioContext();
-        nextT = ctx.currentTime;
-        log('AudioContext created at ' + ctx.sampleRate + 'Hz');
-
-        // 3. Worklet
-        const blob = new Blob([WORKLET], { type: 'application/javascript' });
-        const blobUrl = URL.createObjectURL(blob);
-        await ctx.audioWorklet.addModule(blobUrl);
-        log('AudioWorklet loaded');
-
-        // 4. WebSocket
-        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = proto + '//' + location.host + '/browser-stream/';
-        log('Connecting to ' + wsUrl);
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
+        // 5. Setup Data Channel for Events
+        dc = pc.createDataChannel("oai-events");
+        
+        dc.onopen = () => {
+            log('Data Channel OPEN');
             live = true;
-            log('WebSocket OPEN');
             status('Connected - speak now!', 'ok');
             btn.textContent = String.fromCodePoint(0x1F4F5); // end call icon
             btn.classList.add('on');
-            bars.classList.add('live');
-
-            // Pipe mic to OpenAI via WS
-            const src = ctx.createMediaStreamSource(stream);
-            worklet = new AudioWorkletNode(ctx, 'mic-proc');
-            worklet.port.onmessage = e => {
-                if (ws.readyState === 1) {
-                    const b64 = buf2b64(e.data);
-                    ws.send(JSON.stringify({ event: 'media', media: { payload: b64 } }));
-                }
-            };
-            src.connect(worklet);
-            // worklet NOT connected to destination — prevents echo
+            
+            // Send initial session update with tools
+            sendSessionUpdate();
         };
 
-        ws.onmessage = e => {
-            const d = JSON.parse(e.data);
-            if (d.event === 'media') playPCM(d.media.payload);
-            else if (d.event === 'error') log('API ERROR: ' + d.message);
-            else log('API Event: ' + d.event);
+        dc.onmessage = (e) => {
+            const response = JSON.parse(e.data);
+            handleOpenAIEvent(response);
         };
 
-        ws.onerror = e => {
-            console.error('WebSocket Error:', e);
-            log('WS ERROR: Check browser console and Render logs.');
-            status('Connection error: Peer disconnected or failed', 'err');
-        };
+        // 6. SDP Handshake (SDP Offer)
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
-        ws.onclose = ev => {
-            log(`WS CLOSED | Code: ${ev.code} | Reason: ${ev.reason || 'No reason provided'}`);
-            if (ev.code === 1006) {
-                status('Connection lost (1006) - Check Render logs', 'err');
-            } else {
-                status(`Disconnected (${ev.code})`, '');
-            }
-            hangup();
-        };
+        log('Sending SDP offer to OpenAI...');
+        const baseUrl = "https://api.openai.com/v1/realtime";
+        const model = "gpt-4o-realtime-preview-2024-12-17";
+        
+        const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+            method: "POST",
+            body: offer.sdp,
+            headers: {
+                "Authorization": `Bearer ${EPHEMERAL_KEY}`,
+                "Content-Type": "application/sdp",
+            },
+        });
+
+        if (!sdpResponse.ok) {
+            const errBody = await sdpResponse.text();
+            throw new Error(`OpenAI SDP Error: ${sdpResponse.status} - ${errBody}`);
+        }
+
+        const answer = { type: "answer", sdp: await sdpResponse.text() };
+        await pc.setRemoteDescription(answer);
+        log('SDP Handshake complete. Connection established.');
 
     } catch (err) {
-        log('ERROR: ' + err.name + ' - ' + err.message);
-        status(err.name + ': ' + err.message, 'err');
-        btn.textContent = String.fromCodePoint(0x1F4DE);
-        btn.classList.remove('on');
+        log('CRITICAL ERROR: ' + err.message);
+        console.error(err);
+        status('Connection failed', 'err');
+        hangup();
+    }
+}
+
+function sendSessionUpdate() {
+    const SYSTEM_MESSAGE = `You are a professional, warm and friendly AI Receptionist. Your job is to help customers book appointments for services. Here are the ONLY available services you can book: 'Teeth Cleaning', 'Whitening', 'Gym', 'Calistenic', 'doom'. Do NOT assume or make up service names. Always map the customer's request to one of these exact services. To book an appointment: 1. First, always call 'check_availability' to check if the requested slot is free. 2. If the slot is not available, tell the customer the next available slot from the tool result and ask if they want to book that. 3. If the slot is available, collect customer name and phone number, then call 'create_booking'. 4. Always confirm the booking details back to the customer. Today's date is April 15, 2026. You can speak both in English and Bengali depending on the customer's preference. Be conversational and natural, like a real human receptionist.`;
+
+    const sessionUpdate = {
+        type: "session.update",
+        session: {
+            instructions: SYSTEM_MESSAGE,
+            input_audio_transcription: { model: "whisper-1" },
+            tools: [
+                {
+                    type: "function",
+                    name: "check_availability",
+                    description: "Check if a time slot is available for a service before booking.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            service: { type: "string", description: "Name of the service" },
+                            time: { type: "string", description: "Requested time in ISO format (e.g. 2026-04-15T10:00:00Z)" }
+                        },
+                        required: ["service", "time"]
+                    }
+                },
+                {
+                    type: "function",
+                    name: "create_booking",
+                    description: "Create a confirmed booking after availability is confirmed.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            name: { type: "string", description: "Customer full name" },
+                            phone: { type: "string", description: "Customer phone number" },
+                            service: { type: "string", description: "Service name" },
+                            time: { type: "string", description: "ISO format appointment time" },
+                            notes: { type: "string", description: "Any additional notes" }
+                        },
+                        required: ["name", "phone", "service", "time"]
+                    }
+                }
+            ],
+            tool_choice: "auto"
+        }
+    };
+    log('Sending session update with tools & instructions...');
+    dc.send(JSON.stringify(sessionUpdate));
+
+    // Optional initial greeting
+    const greet = {
+        type: "conversation.item.create",
+        item: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Hello! Please greet me." }]
+        }
+    };
+    dc.send(JSON.stringify(greet));
+    dc.send(JSON.stringify({ type: "response.create" }));
+}
+
+async function handleOpenAIEvent(event) {
+    if (event.type === 'input_audio_buffer.speech_started') {
+        log('AI detected speech...');
+    } else if (event.type === 'response.done') {
+        const output = event.response.output || [];
+        for (const item of output) {
+            if (item.type === 'function_call') {
+                await handleToolCall(item);
+            }
+        }
+    } else if (event.type === 'error') {
+        log('OpenAI Error: ' + JSON.stringify(event.error));
+    }
+}
+
+async function handleToolCall(toolCall) {
+    const { name, arguments: argsJson, call_id } = toolCall;
+    const args = JSON.parse(argsJson);
+    log(`Tool Call: ${name} | Args: ${argsJson}`);
+
+    let endpoint = '';
+    if (name === 'check_availability') endpoint = '/api/check-availability/';
+    else if (name === 'create_booking') endpoint = '/api/create-booking/';
+    else return;
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: argsJson
+        });
+        const result = await response.json();
+        log(`Tool Result: ${JSON.stringify(result)}`);
+
+        // Send result back to OpenAI
+        const toolResponse = {
+            type: "conversation.item.create",
+            item: {
+                type: "function_call_output",
+                call_id: call_id,
+                output: JSON.stringify(result)
+            }
+        };
+        dc.send(JSON.stringify(toolResponse));
+        dc.send(JSON.stringify({ type: "response.create" }));
+
+    } catch (err) {
+        log('Tool execution error: ' + err.message);
     }
 }
 
 function hangup() {
-    if (ws && ws.readyState < 2) ws.close();
-    if (worklet) { worklet.disconnect(); worklet = null; }
+    if (pc) { pc.close(); pc = null; }
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    if (ctx) { ctx.close(); ctx = null; }
     live = false;
     btn.textContent = String.fromCodePoint(0x1F4DE);
     btn.classList.remove('on');
     bars.classList.remove('live');
     status('Call ended', '');
     log('Session ended.');
-}
-
-function playPCM(b64) {
-    if (!ctx) return;
-    try {
-        const raw = b642buf(b64);
-        const pcm = new Int16Array(raw);
-        if (!pcm.length) return;
-        const f32 = new Float32Array(pcm.length);
-        for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32767;
-        const buf = ctx.createBuffer(1, f32.length, 24000);
-        buf.getChannelData(0).set(f32);
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(ctx.destination);
-        const now = ctx.currentTime;
-        if (nextT < now) nextT = now + 0.05;
-        src.start(nextT);
-        nextT += buf.duration;
-    } catch(e) { log('Audio play error: ' + e.message); }
-}
-
-function buf2b64(buf) {
-    const bytes = new Uint8Array(buf);
-    let s = '';
-    for (let i = 0; i < bytes.length; i += 8192)
-        s += String.fromCharCode(...bytes.subarray(i, i + 8192));
-    return btoa(s);
-}
-
-function b642buf(b64) {
-    const s = atob(b64);
-    const b = new Uint8Array(s.length);
-    for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
-    return b.buffer;
 }
 </script>
 </body>

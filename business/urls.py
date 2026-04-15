@@ -16,4 +16,7 @@ urlpatterns = [
     # Backend API: Uses business_id for robustness against special characters
     path("api/chat/<int:business_id>/", views.chat_api, name="chat_api"),
     path("voice-receptionist/", views.voice_receptionist_home, name="voice_receptionist_home"),
-]
+    path("api/realtime-session/", views.realtime_session_view, name="realtime_session"),
+    path("api/check-availability/", views.check_availability_api, name="check_availability_api"),
+    path("api/create-booking/", views.create_booking_api, name="create_booking_api"),
+]
