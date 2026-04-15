@@ -6,14 +6,31 @@ import uuid
 import os
 
 # Use Render's internal/external DB URL from environment variables, or fallback to the provided one
-DB_URL = os.getenv("EXTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+EXT_URL = os.getenv("EXTERNAL_DATABASE_URL")
+INT_URL = os.getenv("DATABASE_URL")
+FALLBACK_URL = "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+
+if EXT_URL:
+    DB_URL = EXT_URL
+    SRC = "EXTERNAL_DATABASE_URL"
+elif INT_URL:
+    DB_URL = INT_URL
+    SRC = "DATABASE_URL (Internal Render DB)"
+else:
+    DB_URL = FALLBACK_URL
+    SRC = "Hardcoded Fallback (External)"
 
 def get_connection():
     try:
+        # Debugging: Log host (masked)
+        from urllib.parse import urlparse
+        parsed = urlparse(DB_URL)
+        print(f"[DB DIAGNOSTIC] Connecting using {SRC} | Host: {parsed.hostname}")
+        
         conn = psycopg2.connect(DB_URL)
         return conn
     except Exception as e:
-        print(f"[DATABASE ERROR] Failed to connect: {e}")
+        print(f"[DATABASE ERROR] Failed to connect using {SRC}: {e}")
         raise
 
 def check_availability(service_name, target_time_str):
