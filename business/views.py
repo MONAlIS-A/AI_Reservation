@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .forms import BusinessForm
-from .models import Business, ChatHistory
+from .models import Business, BusinessEmbedding, BusinessService, ChatHistory
 from .rag import build_pipeline_and_get_db, aget_rag_answer_with_agent, aget_global_rag_answer
 from asgiref.sync import async_to_sync
 import httpx
