@@ -190,7 +190,7 @@ async function connect() {
 
         // 4. WebSocket
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = proto + '//' + location.host + '/browser-stream';
+        const wsUrl = proto + '//' + location.host + '/browser-stream/';
         log('Connecting to ' + wsUrl);
         ws = new WebSocket(wsUrl);
 
