@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Inquiry | {{ business.name }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563EB;
+            --bg-light: #F8FAFC;
+            --border: #E2E8F0;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            margin: 0; font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-light);
+            height: 100vh; display: flex; flex-direction: column;
+        }
+
+        header {
+            background: white; border-bottom: 1px solid var(--border);
+            padding: 15px 40px; display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .logo-container { display: flex; align-items: center; gap: 12px; }
+        .logo-box { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; }
+
+        main { flex: 1; display: flex; overflow: hidden; }
+
+        /* Left Side: Services */
+        .services-sidebar {
+            width: 320px; background: white; border-right: 1px solid var(--border);
+            padding: 30px; overflow-y: auto;
+        }
+
+        .section-title { font-size: 0.8rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 20px; }
+
+        .service-card {
+            border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+            margin-bottom: 15px; cursor: pointer; transition: 0.3s;
+        }
+        .service-card:hover { border-color: var(--primary); background: #F0F7FF; }
+        .service-card.active { border-color: var(--primary); background: #F0F7FF; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }
+
+        .service-name { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
+        .service-price { font-size: 0.9rem; color: #64748B; }
+
+        /* Right Side: Voice Call */
+        .call-area { flex: 1; display: flex; flex-direction: column; padding: 40px; }
+        
+        .assistant-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; }
+        .ai-status { display: flex; align-items: center; gap: 10px; }
+        .status-dot { width: 8px; height: 8px; background: #22C55E; border-radius: 50%; }
+
+        .call-window {
+            flex: 1; background: white; border-radius: 24px; border: 1px solid var(--border);
+            box-shadow: var(--card-shadow); display: flex; flex-direction: column; position: relative;
+        }
+
+        .call-content { flex: 1; padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        
+        .avatar-glow {
+            width: 80px; height: 80px; background: var(--primary); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; color: white;
+            box-shadow: 0 0 30px rgba(37, 99, 235, 0.3); margin-bottom: 20px;
+        }
+
+        .welcome-bubble {
+            background: #F1F5F9; border-radius: 20px; padding: 20px 30px;
+            max-width: 80%; margin-top: 20px; font-size: 1.1rem; line-height: 1.6;
+        }
+
+        .call-controls {
+            padding: 30px; border-top: 1px solid var(--border);
+            display: flex; justify-content: flex-end;
+        }
+
+        .btn-call {
+            background: var(--primary); color: white; border: none; padding: 12px 30px;
+            border-radius: 12px; font-weight: 600; font-size: 1rem; cursor: pointer;
+            display: flex; align-items: center; gap: 10px; transition: 0.3s;
+        }
+        .btn-call:hover { background: #1D4ED8; transform: translateY(-2px); }
+
+        /* Sidebar Meta */
+        .meta-item { display: flex; align-items: center; gap: 10px; color: #64748B; font-size: 0.9rem; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo-container">
+        <div class="logo-box"></div>
+        <div style="font-weight: 600;">AI Reservation & CRM System</div>
+    </div>
+</header>
+
+<main>
+    <div class="services-sidebar">
+        <div class="section-title">Available Services</div>
+        <div id="services-list">
+            {% for service in services %}
+            <div class="service-card" onclick="selectService('{{ service.name }}', this)">
+                <div class="service-name">{{ service.name }}</div>
+                <div class="service-price">{% if service.price %}{{ business.currency|default:"$" }}{{ service.price }}{% else %}Free{% endif %}</div>
+            </div>
+            {% empty %}
+            <p style="color: #94A3B8;">No services available.</p>
+            {% endfor %}
+        </div>
+
+        <div style="margin-top: 40px;">
+            <div class="meta-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                Selected Service: <span id="display-service" style="color: #000; font-weight: 600;">None</span>
+            </div>
+            <div class="meta-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                Time: <span id="display-time" style="color: #000; font-weight: 600;">--:--</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="call-area">
+        <div class="assistant-header">
+            <div class="ai-status">
+                <div class="avatar-sm" style="width:32px; height:32px; background:var(--primary); border-radius:50%;"></div>
+                <div>
+                    <div style="font-weight: 600;">AI Booking Assistant</div>
+                    <div style="font-size: 0.8rem; color: #64748B; display: flex; align-items: center; gap: 5px;">
+                        <span class="status-dot"></span> Live & Ready to help
+                    </div>
+                </div>
+            </div>
+            <button class="btn-call" onclick="startVoiceCall()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                Start Call
+            </button>
+        </div>
+
+        <div class="call-window">
+            <div class="call-content" id="call-interface">
+                <div class="avatar-glow">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+                <div class="welcome-bubble">
+                    Welcome! You've selected <strong>{{ business.name }}</strong>. Click the button above to start a voice call and we'll help you book your appointment in seconds.
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    let selectedServiceName = "";
+
+    function selectService(name, element) {
+        selectedServiceName = name;
+        document.querySelectorAll('.service-card').forEach(c => c.classList.remove('active'));
+        element.classList.add('active');
+        document.getElementById('display-service').textContent = name;
+        
+        // Update bubble text
+        document.querySelector('.welcome-bubble').innerHTML = `You've selected <strong>${name}</strong>. Would you like to check availability via voice call? Just click "Start Call" above.`;
+    }
+
+    function startVoiceCall() {
+        const url = new URL('/voice-receptionist/', window.location.origin);
+        url.searchParams.set('biz', "{{ business.name }}");
+        if (selectedServiceName) {
+            url.searchParams.set('service', selectedServiceName);
+        }
+        // Open the voice interface (either in-place or new window)
+        // For best experience, let's redirect to our new voice interface with parameters
+        window.location.href = url.toString();
+    }
+</script>
+
+</body>
+</html>

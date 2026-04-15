@@ -19,4 +19,5 @@ urlpatterns = [
     path("api/realtime-session/", views.realtime_session_view, name="realtime_session"),
     path("api/check-availability/", views.check_availability_api, name="check_availability_api"),
     path("api/create-booking/", views.create_booking_api, name="create_booking_api"),
+    path("inquiry/<int:business_id>/", views.booking_inquiry_view, name="booking_inquiry"),
 ]
