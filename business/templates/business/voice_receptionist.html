@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Receptionist</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .card {
+            background: rgba(255,255,255,0.07);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 24px;
+            padding: 50px 40px;
+            max-width: 480px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        }
+        .robot { font-size: 60px; margin-bottom: 16px; display: block; }
+        h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            background: linear-gradient(90deg, #a78bfa, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .sub { color: rgba(255,255,255,0.45); font-size: 13px; margin-bottom: 36px; }
+        /* wave bars */
+        .bars { display: flex; justify-content: center; align-items: center; gap: 5px; height: 50px; margin-bottom: 32px; }
+        .bar { width: 5px; background: rgba(167,139,250,0.3); border-radius: 4px; height: 8px; transition: height 0.1s; }
+        .bars.live .bar { background: linear-gradient(to top,#a78bfa,#60a5fa); animation: bwave 1s ease-in-out infinite; }
+        .bar:nth-child(1){animation-delay:.0s} .bar:nth-child(2){animation-delay:.1s}
+        .bar:nth-child(3){animation-delay:.2s} .bar:nth-child(4){animation-delay:.3s}
+        .bar:nth-child(5){animation-delay:.4s} .bar:nth-child(6){animation-delay:.3s}
+        .bar:nth-child(7){animation-delay:.2s} .bar:nth-child(8){animation-delay:.1s}
+        .bar:nth-child(9){animation-delay:.0s}
+        @keyframes bwave { 0%,100%{height:8px} 50%{height:36px} }
+        /* big call button */
+        #callBtn {
+            width: 90px; height: 90px; border-radius: 50%; border: none;
+            font-size: 36px; cursor: pointer;
+            background: linear-gradient(135deg,#7c3aed,#3b82f6);
+            box-shadow: 0 0 30px rgba(124,58,237,.5);
+            margin: 0 auto 28px; display: flex; align-items: center; justify-content: center;
+            transition: transform .2s, box-shadow .2s;
+        }
+        #callBtn:hover { transform: scale(1.1); box-shadow: 0 0 50px rgba(124,58,237,.7); }
+        #callBtn.on {
+            background: linear-gradient(135deg,#dc2626,#f97316);
+            box-shadow: 0 0 30px rgba(220,38,38,.5);
+            animation: pring 1.4s ease-in-out infinite;
+        }
+        @keyframes pring { 0%,100%{box-shadow:0 0 30px rgba(220,38,38,.5)} 50%{box-shadow:0 0 60px rgba(220,38,38,.8),0 0 0 18px rgba(220,38,38,.1)} }
+        /* status pill */
+        #statusPill {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 7px 18px; border-radius: 30px; font-size: 13px;
+            border: 1px solid rgba(255,255,255,.15);
+            background: rgba(255,255,255,.07); color: rgba(255,255,255,.6);
+            transition: all .3s;
+        }
+        #statusPill.ok { background: rgba(52,211,153,.15); border-color: rgba(52,211,153,.3); color: #34d399; }
+        #statusPill.err { background: rgba(220,38,38,.15); border-color: rgba(220,38,38,.3); color: #f87171; }
+        .sdot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+        .sdot.blink { animation: bl 1.2s infinite; }
+        @keyframes bl { 0%,100%{opacity:1} 50%{opacity:.2} }
+        /* debug log */
+        #dbg {
+            margin-top: 20px; text-align: left; font-size: 11px;
+            background: rgba(0,0,0,.4); border-radius: 10px; padding: 10px;
+            max-height: 140px; overflow-y: auto;
+            color: #94a3b8; font-family: monospace;
+        }
+        .info-foot { color: rgba(255,255,255,.25); font-size: 11px; margin-top: 18px; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <span class="robot">&#x1F916;</span>
+    <h1>AI Receptionist</h1>
+    <p class="sub">Voice-powered appointment booking</p>
+
+    <div class="bars" id="bars">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    </div>
+
+    <button id="callBtn">&#x1F4DE;</button>
+
+    <div id="statusPill">
+        <div class="sdot" id="sdot"></div>
+        <span id="stxt">Click to connect</span>
+    </div>
+
+    <div id="dbg">[ Debug Log ]<br></div>
+    <p class="info-foot">Powered by OpenAI Realtime API</p>
+</div>
+
+<script>
+// --- Worklet inline code ---
+const WORKLET = `
+class MicProc extends AudioWorkletProcessor {
+    constructor() {
+        super();
+        this.buffer = new Int16Array(4800);
+        this.head = 0;
+    }
+    process(inputs) {
+        const ch = inputs[0] && inputs[0][0];
+        if (!ch) return true;
+        const ratio = sampleRate / 24000;
+        const outLen = Math.floor(ch.length / ratio);
+        
+        for (let i = 0; i < outLen; i++) {
+            let val = ch[Math.floor(i * ratio)];
+            this.buffer[this.head++] = Math.max(-1, Math.min(1, val)) * 32767;
+            
+            if (this.head >= 2400) { // Send 100ms chunks (2400 samples @ 24kHz)
+                const chunk = new Int16Array(this.buffer.subarray(0, 2400));
+                this.port.postMessage(chunk.buffer, [chunk.buffer]);
+                this.head = 0;
+            }
+        }
+        return true;
+    }
+}
+registerProcessor('mic-proc', MicProc);
+`;
+
+// --- State ---
+let ws, ctx, stream, worklet, nextT = 0, live = false;
+
+// --- DOM ---
+const btn    = document.getElementById('callBtn');
+const pill   = document.getElementById('statusPill');
+const stxt   = document.getElementById('stxt');
+const sdot   = document.getElementById('sdot');
+const bars   = document.getElementById('bars');
+const dbg    = document.getElementById('dbg');
+
+function log(msg) {
+    const t = new Date().toLocaleTimeString();
+    dbg.innerHTML += `[${t}] ${msg}<br>`;
+    dbg.scrollTop = dbg.scrollHeight;
+}
+
+function status(msg, type) {
+    stxt.textContent = msg;
+    pill.className = type === 'ok' ? 'ok' : type === 'err' ? 'err' : '';
+    pill.id = 'statusPill';
+    sdot.className = type === 'ok' ? 'sdot blink' : 'sdot';
+}
+
+// --- Button ---
+btn.onclick = () => { live ? hangup() : connect(); };
+
+async function connect() {
+    log('Button clicked - starting...');
+    status('Requesting microphone...', '');
+    btn.textContent = '...';
+
+    try {
+        // 1. Mic
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        log('Mic OK - sample rate will be detected via AudioContext');
+
+        // 2. AudioContext
+        ctx = new AudioContext();
+        nextT = ctx.currentTime;
+        log('AudioContext created at ' + ctx.sampleRate + 'Hz');
+
+        // 3. Worklet
+        const blob = new Blob([WORKLET], { type: 'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        await ctx.audioWorklet.addModule(blobUrl);
+        log('AudioWorklet loaded');
+
+        // 4. WebSocket
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = proto + '//' + location.host + '/browser-stream';
+        log('Connecting to ' + wsUrl);
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            live = true;
+            log('WebSocket OPEN');
+            status('Connected - speak now!', 'ok');
+            btn.textContent = String.fromCodePoint(0x1F4F5); // end call icon
+            btn.classList.add('on');
+            bars.classList.add('live');
+
+            // Pipe mic to OpenAI via WS
+            const src = ctx.createMediaStreamSource(stream);
+            worklet = new AudioWorkletNode(ctx, 'mic-proc');
+            worklet.port.onmessage = e => {
+                if (ws.readyState === 1) {
+                    const b64 = buf2b64(e.data);
+                    ws.send(JSON.stringify({ event: 'media', media: { payload: b64 } }));
+                }
+            };
+            src.connect(worklet);
+            // worklet NOT connected to destination — prevents echo
+        };
+
+        ws.onmessage = e => {
+            const d = JSON.parse(e.data);
+            if (d.event === 'media') playPCM(d.media.payload);
+            else if (d.event === 'error') log('API ERROR: ' + d.message);
+            else log('API Event: ' + d.event);
+        };
+
+        ws.onerror = e => {
+            log('WS ERROR: ' + JSON.stringify(e));
+            status('Connection error', 'err');
+        };
+
+        ws.onclose = ev => {
+            log('WS CLOSED code=' + ev.code + ' reason=' + ev.reason);
+            hangup();
+        };
+
+    } catch (err) {
+        log('ERROR: ' + err.name + ' - ' + err.message);
+        status(err.name + ': ' + err.message, 'err');
+        btn.textContent = String.fromCodePoint(0x1F4DE);
+        btn.classList.remove('on');
+    }
+}
+
+function hangup() {
+    if (ws && ws.readyState < 2) ws.close();
+    if (worklet) { worklet.disconnect(); worklet = null; }
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (ctx) { ctx.close(); ctx = null; }
+    live = false;
+    btn.textContent = String.fromCodePoint(0x1F4DE);
+    btn.classList.remove('on');
+    bars.classList.remove('live');
+    status('Call ended', '');
+    log('Session ended.');
+}
+
+function playPCM(b64) {
+    if (!ctx) return;
+    try {
+        const raw = b642buf(b64);
+        const pcm = new Int16Array(raw);
+        if (!pcm.length) return;
+        const f32 = new Float32Array(pcm.length);
+        for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32767;
+        const buf = ctx.createBuffer(1, f32.length, 24000);
+        buf.getChannelData(0).set(f32);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        const now = ctx.currentTime;
+        if (nextT < now) nextT = now + 0.05;
+        src.start(nextT);
+        nextT += buf.duration;
+    } catch(e) { log('Audio play error: ' + e.message); }
+}
+
+function buf2b64(buf) {
+    const bytes = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 8192)
+        s += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    return btoa(s);
+}
+
+function b642buf(b64) {
+    const s = atob(b64);
+    const b = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+    return b.buffer;
+}
+</script>
+</body>
+</html>

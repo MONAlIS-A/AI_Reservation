@@ -1,1 +1,2 @@
-web: gunicorn django_project.wsgi
+web: daphne -b 0.0.0.0 -p $PORT django_project.asgi:application
+

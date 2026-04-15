@@ -79,7 +79,11 @@ def ai_call_page(request, business_name):
     return render(request, 'business/ai_call.html', {'business': business})
 
 
+def voice_receptionist_home(request):
+    return render(request, 'business/voice_receptionist.html')
+
 def global_chat_page(request):
+
     return render(request, 'business/global_chat.html')
 
 
