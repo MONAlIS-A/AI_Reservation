@@ -31,9 +31,10 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
         print("======== [BROWSER CONNECTED] ========")
         
         if not OPENAI_API_KEY:
-            msg = "[ERROR] OPENAI_API_KEY is missing."
+            msg = "[ERROR] OPENAI_API_KEY is missing in environment variables."
             print(msg)
             await self.send(json.dumps({"event": "error", "message": msg}))
+            await asyncio.sleep(1) # Give browser time to receive the message
             await self.close()
             return
 
@@ -79,9 +80,15 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
             for p in pending:
                 p.cancel()
         except Exception as e:
-            print(f"Main loop error: {e}")
-            await self.send(json.dumps({"event": "error", "message": f"Connection failed: {str(e)}"}))
+            msg = f"Main loop error: {str(e)}"
+            print(f"[FATAL] {msg}")
+            try:
+                await self.send(json.dumps({"event": "error", "message": f"Connection failed: {str(e)}"}))
+                await asyncio.sleep(1)
+            except:
+                pass
         finally:
+            print("Closing browser connection.")
             await self.close()
 
     async def forward_browser_to_openai(self):
