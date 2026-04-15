@@ -52,7 +52,12 @@ def create_booking_api(request):
 # -------------------------------
 def booking_inquiry_view(request, business_id):
     """Page for selecting a service and starting a voice call."""
-    business = get_object_or_404(Business, id=business_id)
+    try:
+        business = Business.objects.get(id=business_id)
+    except Business.DoesNotExist:
+        from django.http import HttpResponse
+        return HttpResponse(f"Error: Business with ID {business_id} was not found in the database. Please visit the admin panel and check available IDs.", status=200)
+    
     # Filter services for this business
     services = BusinessService.objects.filter(business=business)
     return render(request, 'business/booking_inquiry.html', {
