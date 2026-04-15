@@ -26,12 +26,12 @@ SYSTEM_MESSAGE = (
 
 class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        # 1. Accept the browser connection IMMEDIATELY to prevent handshake timeout
         await self.accept()
-        print("======== [CONSUMER CONNECTED] ========")
-        print(f"Path: {self.scope.get('path')}")
+        print("======== [BROWSER CONNECTED] ========")
         
         if not OPENAI_API_KEY:
-            msg = "[ERROR] OPENAI_API_KEY not found in environment variables."
+            msg = "[ERROR] OPENAI_API_KEY is missing."
             print(msg)
             await self.send(json.dumps({"event": "error", "message": msg}))
             await self.close()
@@ -40,26 +40,8 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
         self.browser_queue = asyncio.Queue()
         self.openai_ws = None
         
-        try:
-            print(f"Connecting to OpenAI Realtime API (Key length: {len(OPENAI_API_KEY) if OPENAI_API_KEY else 0})...")
-            self.openai_ws = await websockets.connect(
-                'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
-                extra_headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "OpenAI-Beta": "realtime=v1"
-                }
-            )
-            print("[OK] Connected to OpenAI Realtime")
-            await self.initialize_session()
-            print("[OK] Session initialized and ready")
-
-            # Start the main coordination loop
-            self.loop_task = asyncio.create_task(self.run_main_loop())
-            
-        except Exception as e:
-            print(f"[ERROR] Failed to connect to OpenAI: {e}")
-            await self.send(json.dumps({"event": "error", "message": f"OpenAI connect failed: {str(e)}"}))
-            await self.close()
+        # 2. Don't block here. Start the main loop which will handle OpenAI connection.
+        self.loop_task = asyncio.create_task(self.run_main_loop())
 
     async def disconnect(self, close_code):
         print(f"Browser disconnected, close_code={close_code}")
@@ -73,11 +55,23 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
         await self.browser_queue.put(text_data)
 
     async def run_main_loop(self):
-        """Coordinate simultaneous tasks using asyncio.wait."""
-        t1 = asyncio.create_task(self.forward_browser_to_openai())
-        t2 = asyncio.create_task(self.forward_openai_to_browser())
-        
+        """Coordinate OpenAI connection and message forwarding."""
         try:
+            print(f"Connecting to OpenAI Realtime API...")
+            self.openai_ws = await websockets.connect(
+                'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
+                extra_headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "OpenAI-Beta": "realtime=v1"
+                }
+            )
+            print("[OK] Connected to OpenAI Realtime")
+            await self.initialize_session()
+            
+            # Now start forwarding tasks
+            t1 = asyncio.create_task(self.forward_browser_to_openai())
+            t2 = asyncio.create_task(self.forward_openai_to_browser())
+            
             done, pending = await asyncio.wait(
                 [t1, t2],
                 return_when=asyncio.FIRST_COMPLETED
@@ -86,6 +80,7 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
                 p.cancel()
         except Exception as e:
             print(f"Main loop error: {e}")
+            await self.send(json.dumps({"event": "error", "message": f"Connection failed: {str(e)}"}))
         finally:
             await self.close()
 
