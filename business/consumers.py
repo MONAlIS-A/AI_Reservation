@@ -27,7 +27,8 @@ SYSTEM_MESSAGE = (
 class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         await self.accept()
-        print("Browser client connected to Django Channels")
+        print("======== [CONSUMER CONNECTED] ========")
+        print(f"Path: {self.scope.get('path')}")
         
         if not OPENAI_API_KEY:
             msg = "[ERROR] OPENAI_API_KEY not found in environment variables."
