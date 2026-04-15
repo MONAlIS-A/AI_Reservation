@@ -3,10 +3,18 @@ from psycopg2.extras import RealDictCursor
 import datetime
 import uuid
 
-DB_URL = "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+import os
+
+# Use Render's internal/external DB URL from environment variables, or fallback to the provided one
+DB_URL = os.getenv("EXTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
 
 def get_connection():
-    return psycopg2.connect(DB_URL)
+    try:
+        conn = psycopg2.connect(DB_URL)
+        return conn
+    except Exception as e:
+        print(f"[DATABASE ERROR] Failed to connect: {e}")
+        raise
 
 def check_availability(service_name, target_time_str):
     try:

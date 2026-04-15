@@ -223,12 +223,18 @@ async function connect() {
         };
 
         ws.onerror = e => {
-            log('WS ERROR: ' + JSON.stringify(e));
-            status('Connection error', 'err');
+            console.error('WebSocket Error:', e);
+            log('WS ERROR: Check browser console and Render logs.');
+            status('Connection error: Peer disconnected or failed', 'err');
         };
 
         ws.onclose = ev => {
-            log('WS CLOSED code=' + ev.code + ' reason=' + ev.reason);
+            log(`WS CLOSED | Code: ${ev.code} | Reason: ${ev.reason || 'No reason provided'}`);
+            if (ev.code === 1006) {
+                status('Connection lost (1006) - Check Render logs', 'err');
+            } else {
+                status(`Disconnected (${ev.code})`, '');
+            }
             hangup();
         };
 

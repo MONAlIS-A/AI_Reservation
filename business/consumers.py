@@ -30,7 +30,9 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
         print("Browser client connected to Django Channels")
         
         if not OPENAI_API_KEY:
-            print("[ERROR] OPENAI_API_KEY not found in environment.")
+            msg = "[ERROR] OPENAI_API_KEY not found in environment variables."
+            print(msg)
+            await self.send(json.dumps({"event": "error", "message": msg}))
             await self.close()
             return
 
@@ -38,7 +40,7 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
         self.openai_ws = None
         
         try:
-            print("Connecting to OpenAI Realtime API...")
+            print(f"Connecting to OpenAI Realtime API (Key length: {len(OPENAI_API_KEY) if OPENAI_API_KEY else 0})...")
             self.openai_ws = await websockets.connect(
                 'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
                 extra_headers={
@@ -48,13 +50,14 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
             )
             print("[OK] Connected to OpenAI Realtime")
             await self.initialize_session()
-            print("[OK] Session initialized")
+            print("[OK] Session initialized and ready")
 
             # Start the main coordination loop
             self.loop_task = asyncio.create_task(self.run_main_loop())
             
         except Exception as e:
             print(f"[ERROR] Failed to connect to OpenAI: {e}")
+            await self.send(json.dumps({"event": "error", "message": f"OpenAI connect failed: {str(e)}"}))
             await self.close()
 
     async def disconnect(self, close_code):
@@ -213,20 +216,26 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
 
         print(f"Tool called: {name} | Args: {args}")
 
-        if name == 'check_availability':
-            # Run blocking DB call in thread
-            result = await asyncio.to_thread(check_availability, args['service'], args['time'])
-        elif name == 'create_booking':
-            result = await asyncio.to_thread(
-                create_booking_ext,
-                args['service'],
-                args['time'],
-                args['name'],
-                args['phone'],
-                args.get('notes', '')
-            )
-        else:
-            result = {"error": "Unknown tool"}
+        try:
+            if name == 'check_availability':
+                # Run blocking DB call in thread
+                result = await asyncio.to_thread(check_availability, args['service'], args['time'])
+            elif name == 'create_booking':
+                result = await asyncio.to_thread(
+                    create_booking_ext,
+                    args['service'],
+                    args['time'],
+                    args['name'],
+                    args['phone'],
+                    args.get('notes', '')
+                )
+            else:
+                result = {"error": "Unknown tool"}
+            
+            print(f"Tool result: {result}")
+        except Exception as e:
+            print(f"[ERROR] Tool execution failed: {e}")
+            result = {"error": str(e)}
 
         # Send result back
         tool_response = {
