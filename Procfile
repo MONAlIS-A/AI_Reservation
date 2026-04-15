@@ -1,2 +1,2 @@
-web: uvicorn django_project.asgi:application --host 0.0.0.0 --port $PORT
+web: python manage.py migrate && daphne -b 0.0.0.0 -p $PORT django_project.asgi:application
 
