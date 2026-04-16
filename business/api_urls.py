@@ -24,7 +24,7 @@ urlpatterns = [
     path("global-chat/", GlobalChatAPIView.as_view(), name="api_global_chat_api"), # font desk chatbot 
     
     # Backend Chat API (MUST be above str paths to catch integer IDs first)
-    path("chat/<int:business_id>/", ChatAPIView.as_view(), name="api_chat_api"),
+    path("chat/<slug:business_id>/", ChatAPIView.as_view(), name="api_chat_api"),
 
     # These return Business data (JSON) instead of rendering HTML pages
     path("chat/<str:business_name>/", BusinessDetailByNameAPIView.as_view(), name="api_chatbot_data"),# business chatbot

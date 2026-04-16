@@ -185,7 +185,7 @@ class ChatAPIView(APIView):
             500: openapi.Response(description="Internal server error"),
         },
         manual_parameters=[
-            openapi.Parameter('business_id', openapi.IN_PATH, description="ID of the business", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('business_id', openapi.IN_PATH, description="ID or UUID of the business", type=openapi.TYPE_STRING),
         ],
         tags=['Business Chat']
     )

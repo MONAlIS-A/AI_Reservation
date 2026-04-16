@@ -20,7 +20,10 @@ from langchain_community.vectorstores import FAISS
 
 def load_business_documents(business_id=None):
     if business_id:
-        businesses = Business.objects.filter(id=business_id)
+        if str(business_id).isdigit():
+            businesses = Business.objects.filter(id=int(business_id))
+        else:
+            businesses = Business.objects.filter(external_uuid=business_id)
     else:
         businesses = Business.objects.all()
     docs = []
@@ -152,7 +155,10 @@ async def run_tool(name, args, business_id=None, website_url=None):
         search_query = args.get("query", "")
         if (not exec_url or exec_url == "null") and exec_biz_id:
             try:
-                biz = await sync_to_async(Business.objects.filter(id=int(exec_biz_id)).first)()
+                if str(exec_biz_id).isdigit():
+                    biz = await sync_to_async(Business.objects.filter(id=int(exec_biz_id)).first)()
+                else:
+                    biz = await sync_to_async(Business.objects.filter(external_uuid=exec_biz_id).first)()
                 if biz: exec_url = biz.website_url
             except Exception: pass
         if not exec_url: return "No website available to search."
@@ -202,7 +208,10 @@ async def run_tool(name, args, business_id=None, website_url=None):
                     biz_name = d.metadata.get('business_name')
                     biz_url = "Unknown"
                     try:
-                        biz_obj = await sync_to_async(Business.objects.filter(id=biz_id).first)()
+                        if str(biz_id).isdigit():
+                            biz_obj = await sync_to_async(Business.objects.filter(id=int(biz_id)).first)()
+                        else:
+                            biz_obj = await sync_to_async(Business.objects.filter(external_uuid=biz_id).first)()
                         if biz_obj: biz_url = biz_obj.website_url
                     except: pass
                     encoded_name = quote(biz_name)
@@ -289,7 +298,11 @@ async def agenerate_suggestions(answer):
 async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     try:
         # Better lookup for production (handling potential type mismatches)
-        biz = await sync_to_async(Business.objects.filter(id=int(business_id)).first)()
+        if str(business_id).isdigit():
+            biz = await sync_to_async(Business.objects.filter(id=int(business_id)).first)()
+        else:
+            biz = await sync_to_async(Business.objects.filter(external_uuid=business_id).first)()
+            
         if not biz:
             return f"Business ID {business_id} not found in the database. Please check your URL."
     except Exception as e: 
@@ -450,7 +463,7 @@ async def aget_global_rag_answer(query, chat_history=None):
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "business_id": {"type": "integer"},
+                        "business_id": {"type": "string"},
                         "query": {"type": "string"}
                     }, 
                     "required": ["business_id", "query"]
@@ -465,7 +478,7 @@ async def aget_global_rag_answer(query, chat_history=None):
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "business_id": {"type": "integer"},
+                        "business_id": {"type": "string"},
                         "url": {"type": "string"},
                         "query": {"type": "string", "description": "Specific product or service name to look for."}
                     }, 

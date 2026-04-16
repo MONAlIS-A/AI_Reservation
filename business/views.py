@@ -8,6 +8,10 @@ from asgiref.sync import async_to_sync
 import httpx
 import os
 import json
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 
 from external_db_handler import check_availability as db_check_availability, create_booking_ext as db_create_booking
@@ -16,6 +20,22 @@ from external_db_handler import check_availability as db_check_availability, cre
 # -------------------------------
 # Realtime Tools API
 # -------------------------------
+@swagger_auto_schema(
+    method='post',
+    operation_description="Check service availability for a specific time slot.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['service', 'time'],
+        properties={
+            'service': openapi.Schema(type=openapi.TYPE_STRING, description='Service name'),
+            'time': openapi.Schema(type=openapi.TYPE_STRING, description='Desired time (YYYY-MM-DD HH:MM)')
+        }
+    ),
+    responses={200: openapi.Response(description="Availability results")},
+    tags=['Realtime Tools']
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
 @csrf_exempt
 def check_availability_api(request):
     if request.method != 'POST':
@@ -29,6 +49,25 @@ def check_availability_api(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+@swagger_auto_schema(
+    method='post',
+    operation_description="Create a new booking in the system.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['service', 'time', 'name', 'phone'],
+        properties={
+            'service': openapi.Schema(type=openapi.TYPE_STRING),
+            'time': openapi.Schema(type=openapi.TYPE_STRING),
+            'name': openapi.Schema(type=openapi.TYPE_STRING),
+            'phone': openapi.Schema(type=openapi.TYPE_STRING),
+            'notes': openapi.Schema(type=openapi.TYPE_STRING),
+        }
+    ),
+    responses={200: openapi.Response(description="Booking confirmation")},
+    tags=['Realtime Tools']
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
 @csrf_exempt
 def create_booking_api(request):
     if request.method != 'POST':
@@ -50,25 +89,59 @@ def create_booking_api(request):
 # -------------------------------
 # Customer Service / Inquiry
 # -------------------------------
+@swagger_auto_schema(
+    method='get',
+    operation_description="Page - Booking Inquiry. Shows services based on business slug/ID.",
+    manual_parameters=[
+        openapi.Parameter('business_id', openapi.IN_PATH, description="ID or UUID", type=openapi.TYPE_STRING),
+    ],
+    tags=['Pages']
+)
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def booking_inquiry_view(request, business_id):
     """Page for selecting a service and starting a voice call."""
+    # Try ID first, then fallback to external_uuid
     try:
-        business = Business.objects.get(id=business_id)
-    except Business.DoesNotExist:
+        if str(business_id).isdigit():
+            business = Business.objects.filter(id=int(business_id)).first()
+        else:
+            business = Business.objects.filter(external_uuid=business_id).first()
+            
+        if not business:
+            raise Business.DoesNotExist
+    except:
         from django.http import HttpResponse
-        return HttpResponse(f"Error: Business with ID {business_id} was not found in the database. Please visit the admin panel and check available IDs.", status=200)
+        if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+            return HttpResponse(f"Error: Business with ID/UUID {business_id} was not found. Please check your URL.", status=200)
+        return JsonResponse({'error': 'Business not found'}, status=404)
     
     # Filter services for this business
     services = BusinessService.objects.filter(business=business)
-    return render(request, 'business/booking_inquiry.html', {
-        'business': business,
-        'services': services
+    
+    if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return render(request, 'business/booking_inquiry.html', {
+            'business': business,
+            'services': services
+        })
+        
+    return JsonResponse({
+        'business': business.name,
+        'services': list(services.values('id', 'name', 'price', 'description'))
     })
 
 
 # -------------------------------
 # Realtime Session (WebRTC)
 # -------------------------------
+@swagger_auto_schema(
+    method='post',
+    operation_description="Fetch an ephemeral session token from OpenAI for client-side WebRTC connection. Useful for Voice AI interaction.",
+    responses={200: openapi.Response(description="OpenAI Session data")},
+    tags=['Realtime Tools']
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
 @csrf_exempt
 def realtime_session_view(request):
     """
@@ -113,6 +186,23 @@ def realtime_session_view(request):
 # -------------------------------
 # Business Creation
 # -------------------------------
+@swagger_auto_schema(
+    method='post',
+    operation_description="Create a new chatbot/business and generate embeddings.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['name'],
+        properties={
+            'name': openapi.Schema(type=openapi.TYPE_STRING),
+            'description': openapi.Schema(type=openapi.TYPE_STRING),
+            'website_url': openapi.Schema(type=openapi.TYPE_STRING),
+        }
+    ),
+    responses={200: openapi.Response(description="Chatbot created")},
+    tags=['Business Management']
+)
+@api_view(['POST', 'GET'])
+@permission_classes([AllowAny])
 @csrf_exempt
 def create_chatbot(request):
     if request.method == "POST":
@@ -166,33 +256,107 @@ def create_business(request):
 # -------------------------------
 # Pages
 # -------------------------------
+@swagger_auto_schema(
+    method='get',
+    operation_description="Page - Main Chat Interface for a business.",
+    responses={200: openapi.Response(description="Business detail data for the chatbot")},
+    tags=['Pages']
+)
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def chatbot_page(request, business_name):
     business = get_object_or_404(Business, name__iexact=business_name)
-    return render(request, 'business/chatbot.html', {'business': business})
+    if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return render(request, 'business/chatbot.html', {'business': business})
+    return JsonResponse({
+        'name': business.name,
+        'description': business.description,
+        'website_url': business.website_url,
+        'external_uuid': str(business.external_uuid) if business.external_uuid else None
+    })
 
 
+@swagger_auto_schema(
+    method='get',
+    operation_description="Page - AI Receptionist view (Floating Avatar).",
+    responses={200: openapi.Response(description="Business data for receptionist")},
+    tags=['Pages']
+)
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def receptionist_page(request, business_name):
     business = get_object_or_404(Business, name__iexact=business_name)
-    return render(request, 'business/receptionist.html', {'business': business})
+    if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return render(request, 'business/receptionist.html', {'business': business})
+    return JsonResponse({
+        'name': business.name,
+        'id': business.id,
+        'external_uuid': str(business.external_uuid)
+    })
 
 
+@swagger_auto_schema(
+    method='get',
+    operation_description="Page - Voice Call Interface.",
+    responses={200: openapi.Response(description="Business details for voice call")},
+    tags=['Pages']
+)
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def ai_call_page(request, business_name):
     business = get_object_or_404(Business, name__iexact=business_name)
-    return render(request, 'business/ai_call.html', {'business': business})
+    if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return render(request, 'business/ai_call.html', {'business': business})
+    return JsonResponse({'name': business.name, 'id': business.id})
 
 
+@swagger_auto_schema(
+    method='get',
+    operation_description="Page - Voice Receptionist Home.",
+    tags=['Pages']
+)
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def voice_receptionist_home(request):
-    return render(request, 'business/voice_receptionist.html')
+    if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return render(request, 'business/voice_receptionist.html')
+    return JsonResponse({'message': 'Voice Receptionist Home API'})
 
+@swagger_auto_schema(
+    method='get',
+    operation_description="Page - Global Discovery Chat.",
+    tags=['Pages']
+)
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def global_chat_page(request):
-
-    return render(request, 'business/global_chat.html')
+    if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return render(request, 'business/global_chat.html')
+    return JsonResponse({'message': 'Welcome to Global Discovery Assistant'})
 
 
 from django.db import transaction
 
 from django.db.models import Q
 
+@swagger_auto_schema(
+    method='post',
+    operation_description="Global Discovery Chat API. Search across all businesses.",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['message'],
+        properties={
+            'message': openapi.Schema(type=openapi.TYPE_STRING),
+            'chat_history': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
+            'user_id': openapi.Schema(type=openapi.TYPE_STRING),
+        }
+    ),
+    responses={200: openapi.Response(description="AI Answer")},
+    tags=['Discovery']
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@csrf_exempt
 def global_chat_api(request):
     if request.method == 'POST':
         try:
@@ -235,6 +399,26 @@ def global_chat_api(request):
 # -------------------------------
 # BUSINESS CHAT API (SYNC FIXED)
 # -------------------------------
+@swagger_auto_schema(
+    method='post',
+    operation_description="Chat with a specific Business AI Receptionist by ID or UUID.",
+    manual_parameters=[
+        openapi.Parameter('business_id', openapi.IN_PATH, description="ID or UUID of the business", type=openapi.TYPE_STRING),
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['message'],
+        properties={
+            'message': openapi.Schema(type=openapi.TYPE_STRING),
+            'chat_history': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
+        }
+    ),
+    responses={200: openapi.Response(description="AI Answer")},
+    tags=['Business Chat']
+)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@csrf_exempt
 def chat_api(request, business_id):
     if request.method == 'POST':
         try:
