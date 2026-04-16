@@ -1,28 +1,37 @@
 import json
 import asyncio
 import os
+import datetime
 import websockets
 from channels.generic.websocket import AsyncWebsocketConsumer
 from external_db_handler import check_availability, create_booking_ext
 
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+from django.conf import settings
+from external_db_handler import (
+    check_availability, 
+    create_booking_ext, 
+    get_business_data_for_rag,
+    get_openai_api_key
+)
+
 VOICE = 'alloy'
 
-# System Prompt
-SYSTEM_MESSAGE = (
-    "You are a professional, warm and friendly AI Receptionist. "
-    "Your job is to help customers book appointments for services. "
-    "Here are the ONLY available services you can book: 'Teeth Cleaning', 'Whitening', 'Gym', 'Calistenic', 'doom'. "
-    "Do NOT assume or make up service names. Always map the customer's request to one of these exact services. "
-    "To book an appointment: "
-    "1. First, always call 'check_availability' to check if the requested slot is free. "
-    "2. If the slot is not available, tell the customer the next available slot from the tool result and ask if they want to book that. "
-    "3. If the slot is available, collect customer name and phone number, then call 'create_booking'. "
-    "4. Always confirm the booking details back to the customer. "
-    f"Today's date is April 15, 2026. "
-    "You can speak both in English and Bengali depending on the customer's preference. "
-    "Be conversational and natural, like a real human receptionist."
-)
+def get_dynamic_system_prompt(biz_name, services):
+    service_list = ", ".join([f"'{s['service_name']}'" for s in services])
+    return (
+        f"You are a professional, warm and friendly AI Receptionist for {biz_name}. "
+        "Your job is to help customers book appointments for services. "
+        f"Here are the ONLY available services you can book: {service_list}. "
+        "Do NOT assume or make up service names. Always map the customer's request to one of these exact services. "
+        "To book an appointment: "
+        "1. First, always call 'check_availability' to check if the requested slot is free. "
+        "2. If the slot is not available, tell the customer the next available slot from the tool result and ask if they want to book that. "
+        "3. If the slot is available, collect customer name and phone number, then call 'create_booking'. "
+        "4. Always confirm the booking details back to the customer. "
+        f"Today's date is {datetime.datetime.now().strftime('%B %d, %Y')}. "
+        "You can speak both in English and Bengali depending on the customer's preference. "
+        "Be conversational and natural, like a real human receptionist."
+    )
 
 class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -30,11 +39,30 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
         await self.accept()
         print("======== [BROWSER CONNECTED] ========")
         
-        if not OPENAI_API_KEY:
-            msg = "[ERROR] OPENAI_API_KEY is missing in environment variables."
+        # Determine business from path
+        path = self.scope['path']
+        biz_id_or_name = path.split('/')[-2] # receptionist/<biz_id>/
+        
+        # Fetch key and services
+        self.openai_api_key = await asyncio.to_thread(get_openai_api_key)
+        if not self.openai_api_key:
+            self.openai_api_key = settings.OPENAI_API_KEY
+
+        all_biz = await asyncio.to_thread(get_business_data_for_rag)
+        self.biz = next((b for b in all_biz if str(b['id']) == str(biz_id_or_name) or b['business_name'].lower() == str(biz_id_or_name).lower()), None)
+        
+        if not self.biz:
+            await self.send(json.dumps({"event": "error", "message": f"Business '{biz_id_or_name}' not found."}))
+            await self.close()
+            return
+
+        self.system_message = get_dynamic_system_prompt(self.biz['business_name'], self.biz.get('services', []))
+
+        if not self.openai_api_key:
+            msg = "[ERROR] OPENAI_API_KEY is missing."
             print(msg)
             await self.send(json.dumps({"event": "error", "message": msg}))
-            await asyncio.sleep(1) # Give browser time to receive the message
+            await asyncio.sleep(1)
             await self.close()
             return
 
@@ -62,7 +90,7 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
             self.openai_ws = await websockets.connect(
                 'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
                 extra_headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Authorization": f"Bearer {self.openai_api_key}",
                     "OpenAI-Beta": "realtime=v1"
                 }
             )
@@ -149,7 +177,7 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
         session_update = {
             "type": "session.update",
             "session": {
-                "instructions": SYSTEM_MESSAGE,
+                "instructions": self.system_message,
                 "voice": VOICE,
                 "input_audio_format": "pcm16",
                 "output_audio_format": "pcm16",
