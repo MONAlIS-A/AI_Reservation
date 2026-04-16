@@ -8,10 +8,14 @@ import json
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-
 from .models import Business, ChatHistory
-from .calendar_service import get_slots, book_appointment, check_booking_status
+from .calendar_service import check_booking_status
+from external_db_handler import (
+    get_openai_api_key, 
+    get_business_data_for_rag, 
+    check_availability as ext_check_availability,
+    create_booking_ext
+)
 
 # --- RAG Utils ---
 from langchain_core.documents import Document
@@ -19,19 +23,47 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 
 def load_business_documents(business_id=None):
-    if business_id:
-        if str(business_id).isdigit():
-            businesses = Business.objects.filter(id=int(business_id))
-        else:
-            businesses = Business.objects.filter(external_uuid=business_id)
-    else:
-        businesses = Business.objects.all()
+    """
+    Fetches business documents from the core.embeddings table in reservation-db.
+    """
+    conn = get_connection()
     docs = []
-    for biz in businesses:
-        if biz.description:
-            text = f"Business Name: {biz.name}\nDescription: {biz.description}"
-            docs.append(Document(page_content=text, metadata={"business_id": biz.id, "business_name": biz.name}))
-    return docs
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            query = "SELECT content, metadata, business_id FROM core.embeddings"
+            params = []
+            if business_id:
+                query += " WHERE business_id = %s"
+                params.append(business_id)
+            
+            cur.execute(query, params)
+            rows = cur.fetchall()
+            
+            for row in rows:
+                meta = row['metadata'] or {}
+                if isinstance(meta, str): meta = json.loads(meta)
+                meta['business_id'] = row['business_id']
+                docs.append(Document(page_content=row['content'], metadata=meta))
+                
+        # If no documents found in embeddings table, fallback to business/service summary
+        if not docs:
+            print("[RAG] No documents in core.embeddings, falling back to basic data.")
+            businesses = get_business_data_for_rag()
+            if business_id:
+                businesses = [b for b in businesses if str(b['id']) == str(business_id)]
+            for biz in businesses:
+                text = f"Business: {biz['business_name']}\nDescription: {biz.get('description', '')}\n"
+                if biz.get('services'):
+                    for s in biz['services']:
+                        text += f"Service: {s['service_name']} - {s['description']} ({s['base_price']} {s['currency']})\n"
+                docs.append(Document(page_content=text, metadata={"business_id": biz['id']}))
+                
+        return docs
+    except Exception as e:
+        print(f"[RAG ERROR] Failed to load docs: {e}")
+        return []
+    finally:
+        conn.close()
 
 def split_documents(docs):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
@@ -167,32 +199,36 @@ async def run_tool(name, args, business_id=None, website_url=None):
         return content
     
     elif name == "check_calendar":
-        res = await sync_to_async(get_slots)(exec_biz_id, args.get('date'))
+        service_name = args.get('service_name', '')
+        date_str = args.get('date', '')
+        # Fallback to current time if no date
+        target_time = date_str if 'T' in date_str else f"{date_str}T10:00:00Z"
+        res = await sync_to_async(ext_check_availability)(service_name, target_time)
         return json.dumps(res)
     
     elif name == "book_appointment":
-        res = await sync_to_async(book_appointment)(
-            exec_biz_id, 
-            args.get('customer_name'), 
-            args.get('customer_email'),
+        res = await sync_to_async(create_booking_ext)(
             args.get('service_name'),
-            args.get('start_time')
+            args.get('start_time'), # This should be ISO format
+            args.get('customer_name'), 
+            args.get('customer_phone', args.get('customer_email')), # Fallback to email as phone
+            args.get('notes', "Booked via AI Assistant")
         )
         return json.dumps(res)
 
     elif name == "search_across_businesses":
         try:
-            # Enhanced multi-business directory
+            # Enhanced multi-business directory from reservation-db
             if args.get("query", "").lower() in ["list all", "hello", "hi", "all businesses", "identify yourself"]:
-                businesses = await sync_to_async(lambda: list(Business.objects.all()))()
+                businesses = await sync_to_async(get_business_data_for_rag)()
                 from urllib.parse import quote
                 results = []
                 for biz in businesses:
-                    encoded_name = quote(biz.name)
-                    # Create a clean: **Service** — [Business Name](Link) format
-                    # Using description as service for now
-                    service_summary = str(biz.description).split('.')[0][:50]
-                    results.append(f"- **{service_summary}** — [{biz.name}](https://ai-reservation.onrender.com/receptionist/{encoded_name}/)")
+                    biz_name = biz.get('business_name', 'Business')
+                    encoded_name = quote(biz_name)
+                    # Use description for summary
+                    service_summary = str(biz.get('description', '')).split('.')[0][:50]
+                    results.append(f"- **{service_summary}** — [{biz_name}](https://ai-reservation.onrender.com/receptionist/{encoded_name}/)")
                 
                 header = "## 🌐 Partner Network Directory\nHere are the available services across our partner network:\n\n"
                 footer = "\n\nPlease let me know which service or business you are interested in!"
@@ -297,14 +333,19 @@ async def agenerate_suggestions(answer):
     
 async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     try:
-        # Better lookup for production (handling potential type mismatches)
-        if str(business_id).isdigit():
-            biz = await sync_to_async(Business.objects.filter(id=int(business_id)).first)()
-        else:
-            biz = await sync_to_async(Business.objects.filter(external_uuid=business_id).first)()
+        # Fetch business name/info from reservation-db
+        all_biz = await sync_to_async(get_business_data_for_rag)()
+        # Lookup by ID or name
+        biz = None
+        for b in all_biz:
+            if str(b['id']) == str(business_id) or b['business_name'].lower() == str(business_id).lower():
+                biz = b
+                break
             
         if not biz:
-            return f"Business ID {business_id} not found in the database. Please check your URL."
+            return f"Business '{business_id}' not found in reservation-db. Please verify the URL."
+        
+        biz_name = biz['business_name']
     except Exception as e: 
         return f"Database Error: {str(e)}"
 
@@ -338,8 +379,15 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
             "type": "function",
             "function": {
                 "name": "check_calendar",
-                "description": "Check booked slots for a specific date (YYYY-MM-DD).",
-                "parameters": {"type": "object", "properties": {"date": {"type": "string"}}, "required": ["date"]}
+                "description": "Check if a specific service is available on a specific date and time.",
+                "parameters": {
+                    "type": "object", 
+                    "properties": {
+                        "service_name": {"type": "string"},
+                        "date": {"type": "string", "description": "ISO format (e.g. 2026-04-15T10:00:00Z)"}
+                    }, 
+                    "required": ["service_name", "date"]
+                }
             }
         },
         {
@@ -390,7 +438,7 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     summary_text = f"\nLONG-TERM MEMORY (SUMMARY of past events):\n{summary}\n" if summary else ""
     
     system_prompt = f"""
-    You are the 'AI Receptionist' for {biz.name}. You are professional, empathetic, and direct.
+    You are the 'AI Receptionist' for {biz_name}. You are professional, empathetic, and direct.
     {summary_text}
     CORE MEMORY & IDENTITY (STRICT):
     - ALWAYS analyze the 'LONG-TERM MEMORY' (if present) and the 'RECENT MESSAGES' below before answering.
@@ -432,7 +480,7 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
             if not response.tool_calls:
                 break
             for tool_call in response.tool_calls:
-                res = await run_tool(tool_call["name"], tool_call["args"], business_id, biz.website_url)
+                res = await run_tool(tool_call["name"], tool_call["args"], business_id, None)
                 messages.append(ToolMessage(tool_call_id=tool_call["id"], content=str(res)))
         except Exception as e:
             return f"I had a tiny problem: {str(e)}"

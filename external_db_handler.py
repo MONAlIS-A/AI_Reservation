@@ -22,16 +22,56 @@ else:
 
 def get_connection():
     try:
-        # Debugging: Log host (masked)
-        from urllib.parse import urlparse
-        parsed = urlparse(DB_URL)
-        print(f"[DB DIAGNOSTIC] Connecting using {SRC} | Host: {parsed.hostname}")
-        
         conn = psycopg2.connect(DB_URL)
         return conn
     except Exception as e:
-        print(f"[DATABASE ERROR] Failed to connect using {SRC}: {e}")
+        print(f"[DATABASE ERROR] Failed to connect: {e}")
         raise
+
+def get_openai_api_key():
+    """
+    Fetches the OpenAI API key from the core.platform_settings table.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT value FROM core.platform_settings WHERE key = 'openai_api_key' LIMIT 1")
+            row = cur.fetchone()
+            if row:
+                return row['value']
+            return None
+    except Exception as e:
+        print(f"[DB ERROR] Failed to fetch OpenAI key: {e}")
+        return None
+    finally:
+        conn.close()
+
+def get_business_data_for_rag():
+    """
+    Fetches all businesses and their services to build the RAG knowledge base.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Fetch businesses
+            cur.execute("SELECT id, business_name, description FROM core.businesses WHERE is_active = true")
+            businesses = cur.fetchall()
+            
+            # Fetch services per business
+            for biz in businesses:
+                cur.execute("""
+                    SELECT service_name, description, base_price, currency, duration_minutes 
+                    FROM core.services 
+                    WHERE business_id = %s AND is_active = true
+                """, (biz['id'],))
+                biz['services'] = cur.fetchall()
+            
+            return businesses
+    except Exception as e:
+        print(f"[DB ERROR] Failed to fetch RAG data: {e}")
+        return []
+    finally:
+        conn.close()
 
 def check_availability(service_name, target_time_str):
     try:

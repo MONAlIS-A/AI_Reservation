@@ -21,6 +21,32 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / '.env')
 
+# --- Dynamic OpenAI Key Fetching from Database ---
+def fetch_db_openai_key():
+    import psycopg2
+    # Prioritize external URL for local tests, internal for Render
+    db_url = os.getenv("EXTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM core.platform_settings WHERE key = 'openai_api_key' LIMIT 1")
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            return row[0]
+    except Exception as e:
+        print(f"[SETTINGS ERROR] DB OpenAI Key Fetch Failed: {e}")
+    return None
+
+DB_OPENAI_KEY = fetch_db_openai_key()
+if DB_OPENAI_KEY:
+    os.environ["OPENAI_API_KEY"] = DB_OPENAI_KEY
+    print("[SETTINGS] OpenAI API Key successfully loaded from reservation-db.")
+else:
+    print("[SETTINGS WARNING] Could not fetch OpenAI Key from DB, using environment variables.")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -61,7 +87,9 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "https://ai-reservation-crm-system.onrender.com",
+    "https://ai-reservation-crm-system-la86.onrender.com",
     "https://ai-reservation.onrender.com",
+    "https://ai-reservation-q29p.onrender.com"
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -71,7 +99,10 @@ CORS_ALLOW_METHODS = list(default_methods)
 
 CSRF_TRUSTED_ORIGINS = [
     "https://ai-reservation-crm-system.onrender.com",
+    "https://ai-reservation-crm-system-la86.onrender.com",
     "https://ai-reservation.onrender.com",
+    "https://ai-reservation-q29p.onrender.com"
+
 ]
 
 # Sessions & Cookies (Production)
