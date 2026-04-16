@@ -87,7 +87,7 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "https://ai-reservation-crm-system.onrender.com",
-    "https://ai-reservation-crm-system-la86.onrender.com",
+    "https://ai-reservation-crm-system-xjz3.onrender.com",
     "https://ai-reservation.onrender.com",
     "https://ai-reservation-q29p.onrender.com"
 ]
@@ -99,7 +99,7 @@ CORS_ALLOW_METHODS = list(default_methods)
 
 CSRF_TRUSTED_ORIGINS = [
     "https://ai-reservation-crm-system.onrender.com",
-    "https://ai-reservation-crm-system-la86.onrender.com",
+    "https://ai-reservation-crm-system-xjz3.onrender.com",
     "https://ai-reservation.onrender.com",
     "https://ai-reservation-q29p.onrender.com"
 
