@@ -76,17 +76,36 @@
         .sdot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
         .sdot.blink { animation: bl 1.2s infinite; }
         @keyframes bl { 0%,100%{opacity:1} 50%{opacity:.2} }
-        /* debug log */
-        #dbg {
-            margin-top: 20px; text-align: left; font-size: 11px;
-            background: rgba(0,0,0,.4); border-radius: 10px; padding: 10px;
-            max-height: 140px; overflow-y: auto;
-            color: #94a3b8; font-family: monospace;
+        .back-btn {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            background: rgba(255,255,255,0.07);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 50%;
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-decoration: none;
+            font-size: 20px;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 1000;
         }
-        .info-foot { color: rgba(255,255,255,.25); font-size: 11px; margin-top: 18px; }
+        .back-btn:hover {
+            background: rgba(255,255,255,0.15);
+            transform: scale(1.15);
+            border-color: rgba(255,255,255,0.3);
+        }
     </style>
 </head>
 <body>
+<a href="javascript:history.back()" class="back-btn" title="Go Back">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+</a>
 <div class="card">
     <span class="robot">&#x1F916;</span>
     <h1>AI Receptionist</h1>
@@ -104,9 +123,6 @@
         <div class="sdot" id="sdot"></div>
         <span id="stxt">Click to connect</span>
     </div>
-
-    <div id="dbg">[ Debug Log ]<br></div>
-    <p class="info-foot">Powered by OpenAI Realtime API</p>
 </div>
 
 <script>
@@ -149,12 +165,9 @@ const pill   = document.getElementById('statusPill');
 const stxt   = document.getElementById('stxt');
 const sdot   = document.getElementById('sdot');
 const bars   = document.getElementById('bars');
-const dbg    = document.getElementById('dbg');
 
 function log(msg) {
-    const t = new Date().toLocaleTimeString();
-    dbg.innerHTML += `[${t}] ${msg}<br>`;
-    dbg.scrollTop = dbg.scrollHeight;
+    console.log(`[AI-REC] ${msg}`);
 }
 
 function status(msg, type) {
