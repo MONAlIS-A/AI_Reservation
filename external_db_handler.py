@@ -2,7 +2,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import datetime
 import uuid
-
+import time
 import os
 
 # Use Render's internal/external DB URL from environment variables, or fallback to the provided one
@@ -28,23 +28,51 @@ def get_connection():
         print(f"[DATABASE ERROR] Failed to connect: {e}")
         raise
 
+# --- Dynamic API Key Cache (TTL = 60 seconds) ---
+_api_key_cache = {"key": None, "fetched_at": 0}
+_API_KEY_TTL = 60  # seconds
+
 def get_openai_api_key():
     """
-    Fetches the OpenAI API key from the core.platform_settings table.
+    Dynamically fetches the OpenAI API key from the DB.
+    Caches the result for 60 seconds to avoid hammering the DB on every request.
+    When the DB is updated with a new key, it will be picked up within 60 seconds.
+    Priority: DB key > local .env key
     """
-    conn = get_connection()
+    global _api_key_cache
+    now = time.time()
+
+    # Return cached key if still fresh
+    if _api_key_cache["key"] and (now - _api_key_cache["fetched_at"]) < _API_KEY_TTL:
+        return _api_key_cache["key"]
+
+    # Fetch fresh key from DB
     try:
+        conn = get_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT value FROM core.platform_settings WHERE key = 'openai_api_key' LIMIT 1")
             row = cur.fetchone()
-            if row:
-                return row['value']
-            return None
+            if row and row['value']:
+                _api_key_cache["key"] = row['value']
+                _api_key_cache["fetched_at"] = now
+                print(f"[API KEY] Refreshed OpenAI API key from DB.")
+                return _api_key_cache["key"]
     except Exception as e:
         print(f"[DB ERROR] Failed to fetch OpenAI key: {e}")
-        return None
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except:
+            pass
+
+    # Fallback to local environment variable
+    env_key = os.getenv("OPENAI_API_KEY")
+    if env_key:
+        print("[API KEY] Using OpenAI key from local environment (.env).")
+        return env_key
+
+    print("[API KEY ERROR] No OpenAI API key found in DB or environment!")
+    return None
 
 def get_business_data_for_rag():
     """

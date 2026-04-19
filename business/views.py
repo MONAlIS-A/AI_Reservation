@@ -151,7 +151,8 @@ def realtime_session_view(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
-    api_key = os.getenv('OPENAI_API_KEY')
+    from external_db_handler import get_openai_api_key
+    api_key = get_openai_api_key()
     if not api_key:
         return JsonResponse({'error': 'OPENAI_API_KEY not configured on server'}, status=500)
 

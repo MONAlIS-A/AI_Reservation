@@ -17,6 +17,16 @@ from external_db_handler import (
     create_booking_ext
 )
 
+# --- Dynamic LLM/Embeddings factory ---
+# Always fetches the latest API key from DB (cached 60s) so updates take effect without restart.
+def _get_llm(temperature=0.5, model="gpt-4o-mini"):
+    api_key = get_openai_api_key()
+    return ChatOpenAI(model_name=model, temperature=temperature, openai_api_key=api_key)
+
+def _get_embeddings():
+    api_key = get_openai_api_key()
+    return OpenAIEmbeddings(model="text-embedding-3-small", openai_api_key=api_key)
+
 # --- RAG Utils ---
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -71,7 +81,7 @@ def split_documents(docs):
 
 def generate_vector_db(chunks):
     from .models import BusinessEmbedding
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    embeddings = _get_embeddings()
     texts = [chunk.page_content for chunk in chunks]
     if not texts: return None
     vectors = embeddings.embed_documents(texts)
@@ -280,7 +290,7 @@ async def asummarize_chat_history(chat_history):
     if not chat_history or len(chat_history) < 6:
         return ""
     
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
+    llm = _get_llm(temperature=0)
     history_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history])
     
     summary_prompt = f"""
@@ -304,7 +314,7 @@ async def agenerate_suggestions(answer):
     It predicts the user's next logical step (e.g., pricing for products, booking for services).
     """
     try:
-        llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.7)
+        llm = _get_llm(temperature=0.7)
         prompt = f"""
         You are a Strategic Question Generator. Analyze the AI Response below and provided context to generate EXACTLY 3 full-sentence follow-up questions.
         
@@ -349,7 +359,7 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     except Exception as e: 
         return f"Database Error: {str(e)}"
 
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.5)
+    llm = _get_llm(temperature=0.5)
     
     tools = [
         {
@@ -486,13 +496,14 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
             return f"I had a tiny problem: {str(e)}"
 
     suggestions = await agenerate_suggestions(messages[-1].content)
-    return messages[-1].content + f"\n\n[SUGGESTIONS] {' | '.join([f'\"{s}\"' for s in suggestions])} [/SUGGESTIONS]"
+    suggestions_str = ' | '.join(['"' + s + '"' for s in suggestions])
+    return messages[-1].content + f"\n\n[SUGGESTIONS] {suggestions_str} [/SUGGESTIONS]"
 
 async def aget_global_rag_answer(query, chat_history=None):
     """
     Agent that works across ALL businesses.
     """
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
+    llm = _get_llm(temperature=0)
     
     tools = [
         {
@@ -611,7 +622,8 @@ async def aget_global_rag_answer(query, chat_history=None):
             return f"Error: {str(e)}"
 
     suggestions = await agenerate_suggestions(messages[-1].content)
-    return messages[-1].content + f"\n\n[SUGGESTIONS] {' | '.join([f'\"{s}\"' for s in suggestions])} [/SUGGESTIONS]"
+    suggestions_str = ' | '.join(['"' + s + '"' for s in suggestions])
+    return messages[-1].content + f"\n\n[SUGGESTIONS] {suggestions_str} [/SUGGESTIONS]"
 
 def get_rag_answer_with_agent(business_id, query, chat_history=None):
     import asyncio

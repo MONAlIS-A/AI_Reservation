@@ -205,10 +205,15 @@ async function connect() {
         // 3. Setup Audio Playback
         const audioEl = document.createElement("audio");
         audioEl.autoplay = true;
+        audioEl.muted = false;
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl); // ✅ Must be in DOM for audio to play
         pc.ontrack = e => {
             log('Audio track received from OpenAI');
             audioEl.srcObject = e.streams[0];
             bars.classList.add('live');
+            // Unlock autoplay (triggered by user gesture already)
+            audioEl.play().catch(err => log('Audio play error: ' + err));
         };
 
         // 4. Setup Microphone Input

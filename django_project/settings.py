@@ -21,31 +21,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / '.env')
 
-# --- Dynamic OpenAI Key Fetching from Database ---
-def fetch_db_openai_key():
-    import psycopg2
-    # Prioritize external URL for local tests, internal for Render
-    db_url = os.getenv("EXTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
-    try:
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
-        cur.execute("SELECT value FROM core.platform_settings WHERE key = 'openai_api_key' LIMIT 1")
-        row = cur.fetchone()
-        conn.close()
-        if row:
-            return row[0]
-    except Exception as e:
-        print(f"[SETTINGS ERROR] DB OpenAI Key Fetch Failed: {e}")
-    return None
+# NOTE: OpenAI API Key is fetched dynamically per-request from the external DB
+# via external_db_handler.get_openai_api_key() (with 60-second TTL cache).
+# This means updating the key in DB takes effect within 60 seconds without server restart.
+# Fallback: local .env OPENAI_API_KEY is used if DB is unreachable.
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Used only as last resort fallback
 
-DB_OPENAI_KEY = fetch_db_openai_key()
-if DB_OPENAI_KEY:
-    os.environ["OPENAI_API_KEY"] = DB_OPENAI_KEY
-    print("[SETTINGS] OpenAI API Key successfully loaded from reservation-db.")
-else:
-    print("[SETTINGS WARNING] Could not fetch OpenAI Key from DB, using environment variables.")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 # Quick-start development settings - unsuitable for production
