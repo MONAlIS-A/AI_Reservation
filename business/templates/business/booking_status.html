@@ -7,13 +7,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #6366F1;
-            --primary-hover: #4F46E5;
-            --bg-dark: #0F172A;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --text-main: #F8FAFC;
-            --text-muted: #94A3B8;
-            --border: rgba(255, 255, 255, 0.1);
+            --primary: #2563EB;
+            --primary-hover: #1D4ED8;
+            --bg-page: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text-main: #1E293B;
+            --text-muted: #64748B;
+            --border: #E2E8F0;
             --success: #10B981;
             --warning: #F59E0B;
         }
@@ -21,7 +21,7 @@
         body {
             margin: 0;
             font-family: 'Outfit', sans-serif;
-            background: radial-gradient(circle at top left, #1E1B4B, #0F172A);
+            background: linear-gradient(135deg, #F8FAFC, #FFFFFF);
             color: var(--text-main);
             min-height: 100vh;
             display: flex;
@@ -50,9 +50,7 @@
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 10px;
-            background: linear-gradient(to right, #818CF8, #C084FC);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text-main);
         }
 
         .header p {
@@ -62,11 +60,10 @@
 
         .card {
             background: var(--card-bg);
-            backdrop-filter: blur(12px);
             border: 1px solid var(--border);
             border-radius: 24px;
             padding: 40px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
         }
 
         .search-form {
@@ -96,11 +93,11 @@
         }
 
         input {
-            background: rgba(15, 23, 42, 0.6);
+            background: #F8FAFC;
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 12px 16px;
-            color: white;
+            color: var(--text-main);
             font-size: 1rem;
             outline: none;
             transition: all 0.3s;
@@ -136,7 +133,7 @@
         }
 
         .booking-item {
-            background: rgba(255, 255, 255, 0.03);
+            background: #F8FAFC;
             border: 1px solid var(--border);
             border-radius: 20px;
             padding: 24px;
@@ -150,9 +147,10 @@
         }
 
         .booking-item:hover {
-            background: rgba(255, 255, 255, 0.06);
-            border-color: rgba(99, 102, 241, 0.4);
+            background: #FFFFFF;
+            border-color: var(--primary);
             transform: scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
         }
 
         .booking-item::before {
@@ -172,7 +170,7 @@
         .booking-info h3 {
             margin: 0 0 8px 0;
             font-size: 1.3rem;
-            color: #FFF;
+            color: var(--text-main);
         }
 
         .booking-meta {

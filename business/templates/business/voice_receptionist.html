@@ -9,38 +9,35 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            background: linear-gradient(135deg, #F8FAFC, #FFFFFF);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: #1E293B;
         }
         .card {
-            background: rgba(255,255,255,0.07);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.12);
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
             border-radius: 24px;
             padding: 50px 40px;
             max-width: 480px;
             width: 90%;
             text-align: center;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
         .robot { font-size: 60px; margin-bottom: 16px; display: block; }
         h1 {
             font-size: 26px;
             font-weight: 700;
             margin-bottom: 6px;
-            background: linear-gradient(90deg, #a78bfa, #60a5fa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #1E293B;
         }
-        .sub { color: rgba(255,255,255,0.45); font-size: 13px; margin-bottom: 36px; }
+        .sub { color: #64748B; font-size: 13px; margin-bottom: 36px; }
         /* wave bars */
         .bars { display: flex; justify-content: center; align-items: center; gap: 5px; height: 50px; margin-bottom: 32px; }
-        .bar { width: 5px; background: rgba(167,139,250,0.3); border-radius: 4px; height: 8px; transition: height 0.1s; }
-        .bars.live .bar { background: linear-gradient(to top,#a78bfa,#60a5fa); animation: bwave 1s ease-in-out infinite; }
+        .bar { width: 5px; background: #E2E8F0; border-radius: 4px; height: 8px; transition: height 0.1s; }
+        .bars.live .bar { background: linear-gradient(to top,#2563EB,#60A5FA); animation: bwave 1s ease-in-out infinite; }
         .bar:nth-child(1){animation-delay:.0s} .bar:nth-child(2){animation-delay:.1s}
         .bar:nth-child(3){animation-delay:.2s} .bar:nth-child(4){animation-delay:.3s}
         .bar:nth-child(5){animation-delay:.4s} .bar:nth-child(6){animation-delay:.3s}
@@ -51,12 +48,13 @@
         #callBtn {
             width: 90px; height: 90px; border-radius: 50%; border: none;
             font-size: 36px; cursor: pointer;
-            background: linear-gradient(135deg,#7c3aed,#3b82f6);
-            box-shadow: 0 0 30px rgba(124,58,237,.5);
+            background: linear-gradient(135deg,#2563EB,#3b82f6);
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
             margin: 0 auto 28px; display: flex; align-items: center; justify-content: center;
             transition: transform .2s, box-shadow .2s;
+            color: white;
         }
-        #callBtn:hover { transform: scale(1.1); box-shadow: 0 0 50px rgba(124,58,237,.7); }
+        #callBtn:hover { transform: scale(1.1); box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.4); }
         #callBtn.on {
             background: linear-gradient(135deg,#dc2626,#f97316);
             box-shadow: 0 0 30px rgba(220,38,38,.5);
@@ -67,8 +65,8 @@
         #statusPill {
             display: inline-flex; align-items: center; gap: 8px;
             padding: 7px 18px; border-radius: 30px; font-size: 13px;
-            border: 1px solid rgba(255,255,255,.15);
-            background: rgba(255,255,255,.07); color: rgba(255,255,255,.6);
+            border: 1px solid #E2E8F0;
+            background: #F8FAFC; color: #64748B;
             transition: all .3s;
         }
         #statusPill.ok { background: rgba(52,211,153,.15); border-color: rgba(52,211,153,.3); color: #34d399; }
@@ -80,20 +78,20 @@
             position: absolute;
             top: 25px;
             left: 25px;
-            background: rgba(255,255,255,0.07);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.12);
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
             border-radius: 50%;
             width: 46px;
             height: 46px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: #1E293B;
             text-decoration: none;
             font-size: 20px;
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             z-index: 1000;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .back-btn:hover {
             background: rgba(255,255,255,0.15);
