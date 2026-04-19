@@ -157,7 +157,20 @@ def realtime_session_view(request):
         return JsonResponse({'error': 'OPENAI_API_KEY not configured on server'}, status=500)
 
     try:
-        # Request a temporary session from OpenAI
+        # 1. Fetch available services from external DB for the prompt
+        from external_db_handler import get_connection
+        service_names = []
+        try:
+            conn = get_connection()
+            with conn.cursor() as cur:
+                cur.execute("SELECT service_name FROM core.services WHERE is_active = true")
+                rows = cur.fetchall()
+                service_names = [r[0] for r in rows]
+            conn.close()
+        except Exception as db_e:
+            print(f"[ERROR] Could not fetch services for voice prompt: {db_e}")
+
+        # 2. Request a temporary session from OpenAI
         with httpx.Client() as client:
             response = client.post(
                 "https://api.openai.com/v1/realtime/sessions",
@@ -178,7 +191,9 @@ def realtime_session_view(request):
                 'details': response.text
             }, status=response.status_code)
             
-        return JsonResponse(response.json())
+        session_data = response.json()
+        session_data['available_services'] = service_names # Pass services to frontend
+        return JsonResponse(session_data)
         
     except Exception as e:
         return JsonResponse({'error': f'Failed to fetch session: {str(e)}'}, status=500)

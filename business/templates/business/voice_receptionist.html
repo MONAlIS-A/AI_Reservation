@@ -196,7 +196,8 @@ async function connect() {
         
         if (sessionData.error) throw new Error(sessionData.error);
         const EPHEMERAL_KEY = sessionData.client_secret.value;
-        log('Session token received (valid for 1 min)');
+        const AVAILABLE_SERVICES = sessionData.available_services || []; // ✅ New dynamic list
+        log(`Session token received. Found ${AVAILABLE_SERVICES.length} services.`);
 
         // 2. Setup RTCPeerConnection
         pc = new RTCPeerConnection();
@@ -232,7 +233,7 @@ async function connect() {
             btn.classList.add('on');
             
             // Send initial session update with tools
-            sendSessionUpdate();
+            sendSessionUpdate(AVAILABLE_SERVICES); // ✅ Pass services here
         };
 
         dc.onmessage = (e) => {
@@ -274,7 +275,7 @@ async function connect() {
     }
 }
 
-function sendSessionUpdate() {
+function sendSessionUpdate(servicesList = []) {
     const urlParams = new URLSearchParams(window.location.search);
     const bizName = urlParams.get('biz') || "our business";
     const serviceName = urlParams.get('service') || "";
@@ -284,7 +285,10 @@ function sendSessionUpdate() {
         contextInstruction += `The user has already expressed interest in the **${serviceName}** service. Start the conversation by acknowledging this. `;
     }
     
-    const baseInstructions = `Your job is to help customers book appointments for services. Here are the ONLY available services you can book: 'Teeth Cleaning', 'Whitening', 'Gym', 'Calistenic', 'doom'. Do NOT assume or make up service names. Always map the customer's request to one of these exact services. To book an appointment: 1. First, always call 'check_availability' to check if the requested slot is free. 2. If the slot is not available, tell the customer the next available slot from the tool result and ask if they want to book that. 3. If the slot is available, collect customer name and phone number, then call 'create_booking'. 4. Always confirm the booking details back to the customer. Today's date is April 15, 2026. You can speak both in English and Bengali depending on the customer's preference. Be conversational and natural, like a real human receptionist.`;
+    // Format service list for prompt
+    const servicesStr = servicesList.length > 0 ? servicesList.map(s => `'${s}'`).join(', ') : "Teeth Cleaning, Whitening";
+
+    const baseInstructions = `Your job is to help customers book appointments for services. Here are the ONLY available services you can book: ${servicesStr}. Do NOT assume or make up service names. Always map the customer's request to one of these exact services. To book an appointment: 1. First, always call 'check_availability' to check if the requested slot is free. 2. If the slot is not available, tell the customer the next available slot from the tool result and ask if they want to book that. 3. If the slot is available, collect customer name and phone number, then call 'create_booking'. 4. Always confirm the booking details back to the customer. Today's date is April 19, 2026. You can speak both in English and Bengali depending on the customer's preference. Be conversational and natural, like a real human receptionist.`;
 
     const SYSTEM_MESSAGE = contextInstruction + baseInstructions;
 
