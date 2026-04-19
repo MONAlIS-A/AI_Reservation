@@ -56,16 +56,40 @@ def get_openai_api_key():
     print("[API KEY ERROR] Could not find OpenAI API key in any database or environment!")
     return None
 
-# For other data, use the best available URL
-DB_URL = os.getenv("EXTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+# Primary URL for bookings/services (External has highest priority)
+EXTERNAL_FALLBACK_URL = "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+DB_URL = os.getenv("EXTERNAL_DATABASE_URL") or EXTERNAL_FALLBACK_URL
+
+# Note: We intentionally ignore Render's internal DATABASE_URL for bookings 
+# because it usually points to an empty DB. 
 
 def get_connection():
+    """
+    Connects to the database. Always tries the External/Fallback DB first 
+    to ensure we have access to 'core' schema and bookings data.
+    """
     try:
-        conn = psycopg2.connect(DB_URL)
-        return conn
-    except Exception as e:
-        print(f"[DATABASE ERROR] Failed to connect: {e}")
-        raise
+        # Try primary DB_URL
+        conn = psycopg2.connect(DB_URL, connect_timeout=5)
+        # Verify if 'core' schema exists (quick check)
+        with conn.cursor() as cur:
+            cur.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'core'")
+            if cur.fetchone():
+                return conn
+        conn.close()
+    except Exception:
+        pass
+
+    # If primary fails, try Render's internal DATABASE_URL as last resort
+    int_url = os.getenv("DATABASE_URL")
+    if int_url:
+        try:
+            return psycopg2.connect(int_url, connect_timeout=5)
+        except Exception:
+            pass
+            
+    # Final fallback to hardcoded external
+    return psycopg2.connect(EXTERNAL_FALLBACK_URL)
 
 def get_business_data_for_rag():
     """
