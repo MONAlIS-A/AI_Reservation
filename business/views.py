@@ -163,10 +163,12 @@ def realtime_session_view(request):
         try:
             conn = get_connection()
             with conn.cursor() as cur:
-                cur.execute("SELECT service_name FROM core.services WHERE is_active = true")
+                # Fetch distinct active service names
+                cur.execute("SELECT DISTINCT service_name FROM core.services WHERE is_active = true")
                 rows = cur.fetchall()
-                service_names = [r[0] for r in rows]
+                service_names = [r[0] for r in rows if r[0]]
             conn.close()
+            print(f"[VOICE] Found {len(service_names)} services in DB for prompt.")
         except Exception as db_e:
             print(f"[ERROR] Could not fetch services for voice prompt: {db_e}")
 

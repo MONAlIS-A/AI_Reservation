@@ -286,9 +286,18 @@ function sendSessionUpdate(servicesList = []) {
     }
     
     // Format service list for prompt
-    const servicesStr = servicesList.length > 0 ? servicesList.map(s => `'${s}'`).join(', ') : "Teeth Cleaning, Whitening";
+    const servicesStr = servicesList.length > 0 
+        ? servicesList.join(', ') 
+        : "No services currently available";
 
-    const baseInstructions = `Your job is to help customers book appointments for services. Here are the ONLY available services you can book: ${servicesStr}. Do NOT assume or make up service names. Always map the customer's request to one of these exact services. To book an appointment: 1. First, always call 'check_availability' to check if the requested slot is free. 2. If the slot is not available, tell the customer the next available slot from the tool result and ask if they want to book that. 3. If the slot is available, collect customer name and phone number, then call 'create_booking'. 4. Always confirm the booking details back to the customer. Today's date is April 19, 2026. You can speak both in English and Bengali depending on the customer's preference. Be conversational and natural, like a real human receptionist.`;
+    const baseInstructions = `Your job is to help customers book appointments for services. 
+    IMPORTANT: The only services you can book are: ${servicesStr}. 
+    - If a customer asks for a service NOT in this list, politely explain that it is not available and offer the services from the list above.
+    - Do NOT suggest 'Teeth Cleaning' or 'Gym' unless they are in the list provided.
+    - To book an appointment: 
+        1. Always call 'check_availability' first.
+        2. If available, collect Name and Phone, then call 'create_booking'.
+    Today's date is April 19, 2026. You are multilingual (English/Bengali).`;
 
     const SYSTEM_MESSAGE = contextInstruction + baseInstructions;
 
