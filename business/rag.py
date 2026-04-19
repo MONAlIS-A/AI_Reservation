@@ -217,13 +217,47 @@ async def run_tool(name, args, business_id=None, website_url=None):
         return json.dumps(res)
     
     elif name == "book_appointment":
+        service_name = args.get('service_name')
+        start_time_str = args.get('start_time')
+        customer_name = args.get('customer_name')
+        customer_phone = args.get('customer_phone', '')
+        customer_email = args.get('customer_email', '')
+        notes = args.get('notes', "Booked via AI Assistant")
+
         res = await sync_to_async(create_booking_ext)(
-            args.get('service_name'),
-            args.get('start_time'), # This should be ISO format
-            args.get('customer_name'), 
-            args.get('customer_phone', args.get('customer_email')), # Fallback to email as phone
-            args.get('notes', "Booked via AI Assistant")
+            service_name,
+            start_time_str,
+            customer_name,
+            customer_phone,
+            notes
         )
+        
+        # Also save to local Appointment model for status tracking and payment
+        if isinstance(res, dict) and res.get('status') == 'success':
+            from .models import Appointment, Business, BusinessService
+            import datetime
+            try:
+                # Try to find business related to the service
+                service_obj = await sync_to_async(lambda: BusinessService.objects.filter(name__iexact=service_name).first())()
+                business = service_obj.business if service_obj else await sync_to_async(lambda: Business.objects.first())()
+                
+                target_time = datetime.datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                duration = service_obj.duration_minutes if service_obj and service_obj.duration_minutes else 60
+                end_time = target_time + datetime.timedelta(minutes=duration)
+
+                await sync_to_async(Appointment.objects.create)(
+                    business=business,
+                    customer_name=customer_name,
+                    customer_email=customer_email,
+                    customer_phone=customer_phone,
+                    service_name=service_name,
+                    start_time=target_time,
+                    end_time=end_time,
+                    payment_status='pending'
+                )
+            except Exception as e:
+                print(f"Failed to save local appointment in rag.py: {e}")
+        
         return json.dumps(res)
 
     elif name == "search_across_businesses":
@@ -463,6 +497,9 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     - Display results as a list with Name, Price, Image, and Link.
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+    PAYMENT & STATUS (MANDATORY):
+    - After a booking is successful, tell the user: "Your booking is confirmed, but the **payment is currently pending**. You can complete the payment and check your booking details at the **'Check Your Booking Status'** page by providing your email and phone number."
     """
     
     messages = [SystemMessage(content=system_prompt)]
@@ -589,6 +626,9 @@ async def aget_global_rag_answer(query, chat_history=None):
        [Connect with AI Receptionist](https://ai-reservation.onrender.com/receptionist/[EncodedName]/)
 
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+    BOOKING TRACKING:
+    - Users can check their booking status and complete payments at the **'Check Your Booking Status'** page by providing their email and phone number.
     """
 
     messages = [SystemMessage(content=system_prompt)]

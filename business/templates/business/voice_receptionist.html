@@ -293,10 +293,13 @@ function sendSessionUpdate(servicesList = []) {
     const baseInstructions = `Your job is to help customers book appointments for services. 
     IMPORTANT: The only services you can book are: ${servicesStr}. 
     - If a customer asks for a service NOT in this list, politely explain that it is not available and offer the services from the list above.
-    - Do NOT suggest 'Teeth Cleaning' or 'Gym' unless they are in the list provided.
+    - Do NOT suggest services not in the list.
     - To book an appointment: 
         1. Always call 'check_availability' first.
-        2. If available, collect Name and Phone, then call 'create_booking'.
+        2. If available, collect Name, Phone, and Email, then call 'create_booking'.
+    - After calling 'create_booking' and getting success:
+        1. Tell the user their booking is confirmed but the **payment is currently pending**.
+        2. Inform them they can complete the payment and check their status at the **'Check Your Booking Status'** page on our website by providing their email and phone.
     Today's date is April 19, 2026. You are multilingual (English/Bengali).`;
 
     const SYSTEM_MESSAGE = contextInstruction + baseInstructions;
@@ -329,11 +332,12 @@ function sendSessionUpdate(servicesList = []) {
                         properties: {
                             name: { type: "string", description: "Customer full name" },
                             phone: { type: "string", description: "Customer phone number" },
+                            email: { type: "string", description: "Customer email address" },
                             service: { type: "string", description: "Service name" },
                             time: { type: "string", description: "ISO format appointment time" },
                             notes: { type: "string", description: "Any additional notes" }
                         },
-                        required: ["name", "phone", "service", "time"]
+                        required: ["name", "phone", "email", "service", "time"]
                     }
                 }
             ],

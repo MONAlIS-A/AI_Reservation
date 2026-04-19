@@ -54,12 +54,13 @@ def check_availability_api(request):
     operation_description="Create a new booking in the system.",
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
-        required=['service', 'time', 'name', 'phone'],
+        required=['service', 'time', 'name', 'phone', 'email'],
         properties={
             'service': openapi.Schema(type=openapi.TYPE_STRING),
             'time': openapi.Schema(type=openapi.TYPE_STRING),
             'name': openapi.Schema(type=openapi.TYPE_STRING),
             'phone': openapi.Schema(type=openapi.TYPE_STRING),
+            'email': openapi.Schema(type=openapi.TYPE_STRING),
             'notes': openapi.Schema(type=openapi.TYPE_STRING),
         }
     ),
@@ -74,13 +75,49 @@ def create_booking_api(request):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     try:
         data = json.loads(request.body)
+        service_name = data.get('service')
+        time_str = data.get('time')
+        name = data.get('name')
+        phone = data.get('phone')
+        email = data.get('email', '')
+        notes = data.get('notes', '')
+
+        # 1. Create in external DB
         result = db_create_booking(
-            data.get('service'),
-            data.get('time'),
-            data.get('name'),
-            data.get('phone'),
-            data.get('notes', '')
+            service_name,
+            time_str,
+            name,
+            phone,
+            notes
         )
+
+        # 2. Also save to local Appointment model for status tracking and payment
+        if result.get('status') == 'success':
+            from .models import Appointment, Business
+            import datetime
+            try:
+                # Try to find business related to the service
+                service_obj = BusinessService.objects.filter(name__iexact=service_name).first()
+                business = service_obj.business if service_obj else Business.objects.first()
+                
+                target_time = datetime.datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                # Default duration 60 mins if not found
+                duration = service_obj.duration_minutes if service_obj and service_obj.duration_minutes else 60
+                end_time = target_time + datetime.timedelta(minutes=duration)
+
+                Appointment.objects.create(
+                    business=business,
+                    customer_name=name,
+                    customer_email=email,
+                    customer_phone=phone,
+                    service_name=service_name,
+                    start_time=target_time,
+                    end_time=end_time,
+                    payment_status='pending'
+                )
+            except Exception as e:
+                print(f"Failed to save local appointment: {e}")
+
         return JsonResponse(result)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -492,3 +529,51 @@ def chat_api(request, business_id):
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+@swagger_auto_schema(
+    method='get',
+    operation_description="Page - Check Booking Status & Reviews.",
+    manual_parameters=[
+        openapi.Parameter('email', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Customer Email"),
+        openapi.Parameter('phone', openapi.IN_QUERY, type=openapi.TYPE_STRING, description="Customer Phone"),
+    ],
+    tags=['Pages']
+)
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def booking_status_view(request):
+    """Page for users to check their booking status and pay."""
+    from .models import Appointment
+    bookings = []
+    email = ""
+    phone = ""
+    
+    if request.method == 'POST':
+        email = request.data.get('email', '').strip()
+        phone = request.data.get('phone', '').strip()
+        if email or phone:
+            query = Q()
+            if email:
+                query |= Q(customer_email__iexact=email)
+            if phone:
+                query |= Q(customer_phone=phone)
+            bookings = Appointment.objects.filter(query).order_by('-start_time')
+
+    if request.accepted_renderer.format == 'html' or 'text/html' in request.META.get('HTTP_ACCEPT', ''):
+        return render(request, 'business/booking_status.html', {
+            'bookings': bookings,
+            'email': email,
+            'phone': phone
+        })
+    
+    return JsonResponse({
+        'bookings': [
+            {
+                'service': b.service_name,
+                'time': b.start_time.isoformat(),
+                'status': b.status,
+                'payment_status': b.payment_status
+            } for b in bookings
+        ]
+    })

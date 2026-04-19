@@ -64,10 +64,12 @@ class Appointment(models.Model):
     business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='appointments')
     customer_name = models.CharField(max_length=255)
     customer_email = models.EmailField(blank=True, null=True)
+    customer_phone = models.CharField(max_length=20, blank=True, null=True)
     service_name = models.CharField(max_length=255, default="General Service")
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     status = models.CharField(max_length=50, default="confirmed") # confirmed, cancelled
+    payment_status = models.CharField(max_length=50, default="pending") # pending, paid
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
