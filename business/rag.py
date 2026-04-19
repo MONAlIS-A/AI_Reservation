@@ -499,7 +499,7 @@ async def aget_rag_answer_with_agent(business_id, query, chat_history=None):
     Current Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
     PAYMENT & STATUS (MANDATORY):
-    - After a booking is successful, tell the user: "Your booking is confirmed, but the **payment is currently pending**. You can complete the payment and check your booking details at the **'Check Your Booking Status'** page by providing your email and phone number."
+    - After a booking is successful, tell the user: "Your booking for [service] is confirmed, but the **payment is currently pending**. To finalize everything, please head over to the **'Check Your Booking Status'** page on our site. Once you enter your email and phone, you'll see your booking with a **'Pay Now'** button to complete the transaction."
     """
     
     messages = [SystemMessage(content=system_prompt)]

@@ -229,7 +229,7 @@ def create_booking_ext(service_name, target_time_str, customer_name, customer_ph
                     created_at, updated_at
                 ) VALUES (
                     %s, %s, %s, %s, 
-                    'CONFIRMED', %s, %s, 
+                    'PENDING', %s, %s, 
                     %s, %s, %s,
                     NOW(), NOW()
                 ) RETURNING id;

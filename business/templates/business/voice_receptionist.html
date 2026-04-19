@@ -298,8 +298,8 @@ function sendSessionUpdate(servicesList = []) {
         1. Always call 'check_availability' first.
         2. If available, collect Name, Phone, and Email, then call 'create_booking'.
     - After calling 'create_booking' and getting success:
-        1. Tell the user their booking is confirmed but the **payment is currently pending**.
-        2. Inform them they can complete the payment and check their status at the **'Check Your Booking Status'** page on our website by providing their email and phone.
+        1. Inform the user: "Your appointment for [service] at [time] is successfully booked! However, please note that your **payment is currently pending**."
+        2. Guide the user: "To secure your slot, please visit our website and go to the **'Check Your Booking Status'** section. Enter your email and phone number to find your booking, where you will see a **'Pay Now'** button to complete the payment."
     Today's date is April 19, 2026. You are multilingual (English/Bengali).`;
 
     const SYSTEM_MESSAGE = contextInstruction + baseInstructions;
