@@ -5,39 +5,22 @@ import uuid
 import time
 import os
 
-# Use Render's internal/external DB URL from environment variables, or fallback to the provided one
-EXT_URL = os.getenv("EXTERNAL_DATABASE_URL")
-INT_URL = os.getenv("DATABASE_URL")
-FALLBACK_URL = "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
-
-if EXT_URL:
-    DB_URL = EXT_URL
-    SRC = "EXTERNAL_DATABASE_URL"
-elif INT_URL:
-    DB_URL = INT_URL
-    SRC = "DATABASE_URL (Internal Render DB)"
-else:
-    DB_URL = FALLBACK_URL
-    SRC = "Hardcoded Fallback (External)"
-
-def get_connection():
-    try:
-        conn = psycopg2.connect(DB_URL)
-        return conn
-    except Exception as e:
-        print(f"[DATABASE ERROR] Failed to connect: {e}")
-        raise
-
 # --- Dynamic API Key Cache (TTL = 60 seconds) ---
 _api_key_cache = {"key": None, "fetched_at": 0}
 _API_KEY_TTL = 60  # seconds
 
+# List of all possible DB URLs to try for the API key
+DB_URL_OPTIONS = [
+    os.getenv("EXTERNAL_DATABASE_URL"),
+    os.getenv("DATABASE_URL"),
+    "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+]
+
 def get_openai_api_key():
     """
-    Dynamically fetches the OpenAI API key from the DB.
-    Caches the result for 60 seconds to avoid hammering the DB on every request.
-    When the DB is updated with a new key, it will be picked up within 60 seconds.
-    Priority: DB key > local .env key
+    Dynamically fetches the OpenAI API key.
+    Tries all available DB URLs in sequence until a valid key is found.
+    Caches the result for 60 seconds.
     """
     global _api_key_cache
     now = time.time()
@@ -46,33 +29,43 @@ def get_openai_api_key():
     if _api_key_cache["key"] and (now - _api_key_cache["fetched_at"]) < _API_KEY_TTL:
         return _api_key_cache["key"]
 
-    # Fetch fresh key from DB
-    try:
-        conn = get_connection()
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT value FROM core.platform_settings WHERE key = 'openai_api_key' LIMIT 1")
-            row = cur.fetchone()
-            if row and row['value']:
-                _api_key_cache["key"] = row['value']
-                _api_key_cache["fetched_at"] = now
-                print(f"[API KEY] Refreshed OpenAI API key from DB.")
-                return _api_key_cache["key"]
-    except Exception as e:
-        print(f"[DB ERROR] Failed to fetch OpenAI key: {e}")
-    finally:
+    # Try each DB URL until we find the key
+    for url in DB_URL_OPTIONS:
+        if not url: continue
         try:
+            conn = psycopg2.connect(url, connect_timeout=5)
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT value FROM core.platform_settings WHERE key = 'openai_api_key' LIMIT 1")
+                row = cur.fetchone()
+                if row and row['value']:
+                    _api_key_cache["key"] = row['value']
+                    _api_key_cache["fetched_at"] = now
+                    print(f"[API KEY] Successfully fetched key from DB: {url[:30]}...")
+                    conn.close()
+                    return _api_key_cache["key"]
             conn.close()
-        except:
-            pass
+        except Exception as e:
+            # Silently try next URL
+            continue
 
-    # Fallback to local environment variable
+    # Fallback to local environment variable (last resort)
     env_key = os.getenv("OPENAI_API_KEY")
     if env_key:
-        print("[API KEY] Using OpenAI key from local environment (.env).")
         return env_key
 
-    print("[API KEY ERROR] No OpenAI API key found in DB or environment!")
+    print("[API KEY ERROR] Could not find OpenAI API key in any database or environment!")
     return None
+
+# For other data, use the best available URL
+DB_URL = os.getenv("EXTERNAL_DATABASE_URL") or os.getenv("DATABASE_URL") or "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
+
+def get_connection():
+    try:
+        conn = psycopg2.connect(DB_URL)
+        return conn
+    except Exception as e:
+        print(f"[DATABASE ERROR] Failed to connect: {e}")
+        raise
 
 def get_business_data_for_rag():
     """
