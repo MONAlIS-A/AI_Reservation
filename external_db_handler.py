@@ -5,9 +5,9 @@ import uuid
 import time
 import os
 
-# --- Dynamic API Key Cache (TTL = 60 seconds) ---
+# --- Dynamic API Key Cache (TTL = 5 seconds) ---
 _api_key_cache = {"key": None, "fetched_at": 0}
-_API_KEY_TTL = 60  # seconds
+_API_KEY_TTL = 5  # seconds
 
 # List of all possible DB URLs to try for the API key
 DB_URL_OPTIONS = [
@@ -16,17 +16,17 @@ DB_URL_OPTIONS = [
     "postgresql://reservation_user:VYKmw4eCXKoKb7UzujL7JjRs8bekMS4m@dpg-d7ct9p0sfn5c73fvdbdg-a.oregon-postgres.render.com/reservation_dev_mffn"
 ]
 
-def get_openai_api_key():
+def get_openai_api_key(force_refresh=False):
     """
     Dynamically fetches the OpenAI API key.
     Tries all available DB URLs in sequence until a valid key is found.
-    Caches the result for 60 seconds.
+    Caches the result for 5 seconds.
     """
     global _api_key_cache
     now = time.time()
 
-    # Return cached key if still fresh
-    if _api_key_cache["key"] and (now - _api_key_cache["fetched_at"]) < _API_KEY_TTL:
+    # Return cached key if still fresh and not forcing refresh
+    if not force_refresh and _api_key_cache["key"] and (now - _api_key_cache["fetched_at"]) < _API_KEY_TTL:
         return _api_key_cache["key"]
 
     # Try each DB URL until we find the key

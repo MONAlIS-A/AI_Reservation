@@ -85,16 +85,40 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
 
     async def run_main_loop(self):
         """Coordinate OpenAI connection and message forwarding."""
+        retry_count = 0
+        max_retries = 1
+        
+        while retry_count <= max_retries:
+            try:
+                print(f"Connecting to OpenAI Realtime API (Attempt {retry_count + 1})...")
+                self.openai_ws = await websockets.connect(
+                    'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
+                    extra_headers={
+                        "Authorization": f"Bearer {self.openai_api_key}",
+                        "OpenAI-Beta": "realtime=v1"
+                    }
+                )
+                print("[OK] Connected to OpenAI Realtime")
+                break # Success!
+            except Exception as e:
+                # If it's likely an auth error, try to refresh key once
+                if retry_count < max_retries:
+                    print(f"[RETRY] Connection failed: {e}. Refreshing API key...")
+                    self.openai_api_key = await asyncio.to_thread(get_openai_api_key, force_refresh=True)
+                    retry_count += 1
+                    continue
+                else:
+                    msg = f"Main loop error: {str(e)}"
+                    print(f"[FATAL] {msg}")
+                    try:
+                        await self.send(json.dumps({"event": "error", "message": f"Connection failed: {str(e)}"}))
+                        await asyncio.sleep(1)
+                    except:
+                        pass
+                    await self.close()
+                    return
+
         try:
-            print(f"Connecting to OpenAI Realtime API...")
-            self.openai_ws = await websockets.connect(
-                'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
-                extra_headers={
-                    "Authorization": f"Bearer {self.openai_api_key}",
-                    "OpenAI-Beta": "realtime=v1"
-                }
-            )
-            print("[OK] Connected to OpenAI Realtime")
             await self.initialize_session()
             
             # Now start forwarding tasks
@@ -108,13 +132,7 @@ class VoiceReceptionistConsumer(AsyncWebsocketConsumer):
             for p in pending:
                 p.cancel()
         except Exception as e:
-            msg = f"Main loop error: {str(e)}"
-            print(f"[FATAL] {msg}")
-            try:
-                await self.send(json.dumps({"event": "error", "message": f"Connection failed: {str(e)}"}))
-                await asyncio.sleep(1)
-            except:
-                pass
+            print(f"Session task error: {e}")
         finally:
             print("Closing browser connection.")
             await self.close()

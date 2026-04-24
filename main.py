@@ -11,7 +11,10 @@ import websockets
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+from external_db_handler import get_openai_api_key
+
+# Move the static env load to a default/fallback
+DEFAULT_OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PORT = int(os.getenv('PORT', 5050))
 
 SYSTEM_MESSAGE = (
@@ -33,9 +36,6 @@ VOICE = 'alloy'
 
 app = FastAPI()
 
-if not OPENAI_API_KEY:
-    raise ValueError('Missing the OPENAI_API_KEY environment variable.')
-
 # Serve static HTML
 @app.get("/", response_class=HTMLResponse)
 async def index_page():
@@ -48,17 +48,41 @@ async def browser_stream(websocket: WebSocket):
     await websocket.accept()
     print("Browser client connected")
 
+    # Dynamically fetch the key for each new connection
+    openai_api_key = get_openai_api_key() or DEFAULT_OPENAI_API_KEY
+    
+    if not openai_api_key:
+        print("[ERROR] No OpenAI API Key found!")
+        await websocket.send_json({"event": "error", "message": "OpenAI API Key not configured."})
+        await websocket.close()
+        return
+
     openai_ws = None
+    retry_count = 0
+    max_retries = 1
+
     try:
-        print("Connecting to OpenAI Realtime API...")
-        openai_ws = await websockets.connect(
-            'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
-            extra_headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "OpenAI-Beta": "realtime=v1"
-            }
-        )
-        print("[OK] Connected to OpenAI Realtime")
+        while retry_count <= max_retries:
+            try:
+                print(f"Connecting to OpenAI Realtime API (Attempt {retry_count + 1})...")
+                openai_ws = await websockets.connect(
+                    'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
+                    extra_headers={
+                        "Authorization": f"Bearer {openai_api_key}",
+                        "OpenAI-Beta": "realtime=v1"
+                    }
+                )
+                print("[OK] Connected to OpenAI Realtime")
+                break
+            except Exception as e:
+                if retry_count < max_retries:
+                    print(f"[RETRY] Connection failed: {e}. Refreshing API key...")
+                    openai_api_key = get_openai_api_key(force_refresh=True) or DEFAULT_OPENAI_API_KEY
+                    retry_count += 1
+                    continue
+                else:
+                    raise e
+                    
         await initialize_session(openai_ws)
         print("[OK] Session initialized")
 
