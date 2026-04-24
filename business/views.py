@@ -209,51 +209,51 @@ def realtime_session_view(request):
         except Exception as db_e:
             print(f"[ERROR] Could not fetch services for voice prompt: {db_e}")
 
-    # 2. Request a temporary session from OpenAI with retry
-    api_key = get_openai_api_key()
-    retry_count = 0
-    max_retries = 1
-    
-    while retry_count <= max_retries:
-        try:
-            with httpx.Client() as client:
-                response = client.post(
-                    "https://api.openai.com/v1/realtime/sessions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": "gpt-4o-realtime-preview-2024-12-17",
-                        "voice": "alloy",
-                    },
-                    timeout=10.0
-                )
-            
-            if response.status_code == 200:
-                session_data = response.json()
-                session_data['available_services'] = service_names # Pass services to frontend
-                return JsonResponse(session_data)
-            
-            # If auth error and we haven't retried yet
-            if response.status_code == 401 and retry_count < max_retries:
-                print(f"[RETRY] OpenAI session failed (401). Refreshing API key...")
-                api_key = get_openai_api_key(force_refresh=True)
-                retry_count += 1
-                continue
-            
-            return JsonResponse({
-                'error': f'OpenAI session API failed: {response.status_code}',
-                'details': response.text
-            }, status=response.status_code)
+        # 2. Request a temporary session from OpenAI with retry
+        api_key = get_openai_api_key()
+        retry_count = 0
+        max_retries = 1
+        
+        while retry_count <= max_retries:
+            try:
+                with httpx.Client() as client:
+                    response = client.post(
+                        "https://api.openai.com/v1/realtime/sessions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "gpt-4o-realtime-preview-2024-12-17",
+                            "voice": "alloy",
+                        },
+                        timeout=10.0
+                    )
+                
+                if response.status_code == 200:
+                    session_data = response.json()
+                    session_data['available_services'] = service_names # Pass services to frontend
+                    return JsonResponse(session_data)
+                
+                # If auth error and we haven't retried yet
+                if response.status_code == 401 and retry_count < max_retries:
+                    print(f"[RETRY] OpenAI session failed (401). Refreshing API key...")
+                    api_key = get_openai_api_key(force_refresh=True)
+                    retry_count += 1
+                    continue
+                
+                return JsonResponse({
+                    'error': f'OpenAI session API failed: {response.status_code}',
+                    'details': response.text
+                }, status=response.status_code)
 
-        except Exception as e:
-            if retry_count < max_retries:
-                print(f"[RETRY] OpenAI session exception: {e}. Refreshing API key...")
-                api_key = get_openai_api_key(force_refresh=True)
-                retry_count += 1
-                continue
-            raise e
+            except Exception as e:
+                if retry_count < max_retries:
+                    print(f"[RETRY] OpenAI session exception: {e}. Refreshing API key...")
+                    api_key = get_openai_api_key(force_refresh=True)
+                    retry_count += 1
+                    continue
+                raise e
         
     except Exception as e:
         return JsonResponse({'error': f'Failed to fetch session: {str(e)}'}, status=500)
